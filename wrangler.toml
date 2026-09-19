@@ -52,3 +52,13 @@ NTFY_API = "https://ntfy.sh" # ntfy server base URL; leave as-is to use the publ
 #                    The bowl owner can still reject them afterwards (amount is deducted again).
 # "false"           : legacy moderation flow — donation stays "pending" until the owner approves it.
 AUTO_APPROVE_DONATIONS = "true"
+
+# ---- Donation rate limit ----
+# Auto-approved donations count instantly, so without a cap one visitor could inflate a
+# bowl by submitting over and over (and flood the owner's notification channels along the
+# way). The platform never touches the money, so nothing verifies a payment automatically —
+# this cap plus the owner's "reject" button is what keeps the number honest.
+# Counted per "same IP + same bowl", not site-wide: visitors sharing a carrier NAT who chip
+# in to different bowls don't affect each other. Set a value to 0 to disable that tier.
+DONATE_RATE_PER_MINUTE = 3   # same IP + same bowl: max entries per minute (burst)
+DONATE_RATE_PER_DAY = 10     # same IP + same bowl: max entries per day (Asia/Shanghai)

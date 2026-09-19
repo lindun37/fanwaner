@@ -75,6 +75,9 @@ const zh = {
     uploadEmpty: "图片没传起来。",
     uploadRateLimited: "传得有点多了，歇一哈嘛。",
     uploadFormat: "图片格式没对头，现在只收 webp（前端传图会自动转成 webp，再选一张试试）。",
+    // 投喂限流（%d = 上限笔数，来自 wrangler.toml 的 DONATE_RATE_* 配置）
+    donateTooFast: (n) => `一分钟最多给同一个饭碗儿投 ${n} 笔，歇口气再来嘛。`,
+    donateDailyLimit: (n) => `今天已经给这个饭碗儿投过 ${n} 笔了，明天再来嘛。`,
   },
 
   // ---- 投喂人展示名（api 返回里用来替换匿名昵称）----
@@ -197,6 +200,9 @@ const en = {
     uploadEmpty: "No image was uploaded.",
     uploadRateLimited: "That's a lot of uploads — take a short break.",
     uploadFormat: "Wrong image format. Only webp is accepted (the page converts your image automatically — try picking it again).",
+    // donation rate limits (%d = the cap, taken from the DONATE_RATE_* vars)
+    donateTooFast: (n) => `That's more than ${n} contributions a minute to the same bowl. Take a breath and retry.`,
+    donateDailyLimit: (n) => `You've already chipped in to this bowl ${n} times today. Come back tomorrow.`,
   },
 
   // ---- display name for contributors (replaces the nickname when anonymous) ----

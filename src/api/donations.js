@@ -14,13 +14,57 @@ import { getIp, computeDailyKey } from "../lib/ip.js";
 import { randomToken } from "../lib/slug.js";
 import { getBowlBySlug } from "../lib/db.js";
 import { notifyDonation } from "../lib/notify.js";
-import { detectLocale, t } from "../lib/i18n.js";
+import { detectLocale, t, tp } from "../lib/i18n.js";
 import { normalizeCurrency } from "../lib/currency.js";
 
 // 是否免放行直接上墙（默认开）
 export function autoApprove(env) {
   const v = String(env.AUTO_APPROVE_DONATIONS ?? "true").toLowerCase();
   return v !== "false" && v !== "0" && v !== "no";
+}
+
+// ---- 投喂限流 ----
+// 免放行模式下投喂会立刻计入金额，所以这里必须有一道闸：不然同一个人可以连着
+// 提交几十笔把某个饭碗儿的金额刷起来，顺带把碗主的通知渠道刷爆。
+// 口径是「同一 IP + 同一个饭碗儿」而不是全站 —— 运营商大内网共用一个出口 IP 的
+// 不同人分别投不同的碗，彼此不受影响；而刷数的人只会盯着一个碗打。
+// 两个值都能在 wrangler.toml 的 [vars] 里调，设 0 表示关掉那一档。
+const RATE_PER_MINUTE_DEFAULT = 3;
+const RATE_PER_DAY_DEFAULT = 10;
+
+export function donateRateLimits(env) {
+  const num = (v, fallback) => {
+    if (v === undefined || v === null || v === "") return fallback;
+    const n = Number(v);
+    return Number.isFinite(n) && n >= 0 ? Math.floor(n) : fallback;
+  };
+  return {
+    perMinute: num(env.DONATE_RATE_PER_MINUTE, RATE_PER_MINUTE_DEFAULT),
+    perDay: num(env.DONATE_RATE_PER_DAY, RATE_PER_DAY_DEFAULT),
+  };
+}
+
+// iP_hash 每天天然轮换，所以「今天投了几笔」直接按它数就行，不用算日期。
+async function checkDonateRate(env, ipHash, bowlId, locale) {
+  const { perMinute, perDay } = donateRateLimits(env);
+  const count = async (windowClause) => {
+    const row = await env.DB.prepare(
+      `SELECT COUNT(*) AS c FROM donations WHERE ip_hash = ? AND bowl_id = ?${windowClause}`
+    ).bind(ipHash, bowlId).first();
+    return row?.c || 0;
+  };
+
+  if (perMinute > 0 && (await count(" AND created_at > datetime('now','-60 seconds')")) >= perMinute) {
+    const tpl = tp(locale, "err.donateTooFast");
+    const msg = (typeof tpl === "function" ? tpl(perMinute) : tpl) || t(locale, "err.rateLimited");
+    return fail(ERR.RATE_LIMITED, msg, 429);
+  }
+  if (perDay > 0 && (await count("")) >= perDay) {
+    const tpl = tp(locale, "err.donateDailyLimit");
+    const msg = (typeof tpl === "function" ? tpl(perDay) : tpl) || t(locale, "err.rateLimited");
+    return fail(ERR.RATE_LIMITED, msg, 429);
+  }
+  return null;
 }
 
 // POST /api/donation —— 投一口
@@ -55,8 +99,13 @@ export async function createDonation(request, env, ctx) {
 
   // IP 不存明文：投喂记录也只落哈希
   const { key: ipHash } = await computeDailyKey(ip, env.SERVER_SECRET);
+  const ipHash32 = ipHash.slice(0, 32);
 
-  // 3. 写入 donations
+  // 3. 限流：同一 IP 对同一个饭碗儿的投喂次数（先挡 60 秒连发，再挡当天累计）
+  const rateErr = await checkDonateRate(env, ipHash32, bowl.id, locale);
+  if (rateErr) return rateErr;
+
+  // 4. 写入 donations
   //    自动上墙模式下：直接 approved，并在同一事务里累加金额（避免并发下金额落后于记录）
   const auto = autoApprove(env);
   const status = auto ? "approved" : "pending";
@@ -70,7 +119,7 @@ export async function createDonation(request, env, ctx) {
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ${auto ? "datetime('now')" : "NULL"})`
     ).bind(
       bowl.id, nickname, amountCents, currency, message, paymentMethod, txid,
-      isAnonymous, status, ipHash.slice(0, 32), deleteToken
+      isAnonymous, status, ipHash32, deleteToken
     ),
   ];
 
@@ -85,7 +134,7 @@ export async function createDonation(request, env, ctx) {
   const results = await env.DB.batch(stmts);
   const donationId = results[0].meta.last_row_id;
 
-  // 4. 留言通知：异步推给碗主人（失败静默，不影响主流程）
+  // 5. 留言通知：异步推给碗主人（失败静默，不影响主流程）
   notifyDonation(
     env, ctx, bowl,
     {
