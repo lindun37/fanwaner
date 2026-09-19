@@ -24,13 +24,22 @@ export async function serveBowHtml(env, request, pathSlug) {
   if (!res.ok) return res;
   const html = await res.text();
 
+  // 带 ?token= 的地址是「后台门票」：
+  // - Referrer-Policy 一律 no-referrer，令牌不会顺着 Referer 漏给外站（付款跳转也算）
+  // - 带令牌的这一版直接 noindex，免得哪天被谁贴到能被爬的地方收录进搜索结果
+  //   （canonical 已经指向不带令牌的干净地址，这里再加一道锁）
+  const headers = {
+    "Content-Type": "text/html; charset=utf-8",
+    "Referrer-Policy": "no-referrer",
+  };
+  if (url.searchParams.has("token")) {
+    headers["X-Robots-Tag"] = "noindex, nofollow, noarchive";
+  }
+
   if (!isValidSlug(slug)) {
     let out = html;
     for (const p of OG_PLACEHOLDERS) out = out.replaceAll(p, "");
-    return new Response(
-      out,
-      { status: res.status, headers: { "Content-Type": "text/html; charset=utf-8" } }
-    );
+    return new Response(out, { status: res.status, headers });
   }
 
   const locale = detectLocale(request, env);
@@ -72,10 +81,7 @@ export async function serveBowHtml(env, request, pathSlug) {
     .replaceAll("__OG_URL__", escapeAttr(canonical))
     .replaceAll("__META_DESC__", escapeAttr(metaDesc));
 
-  return new Response(replaced, {
-    status: res.status,
-    headers: { "Content-Type": "text/html; charset=utf-8" },
-  });
+  return new Response(replaced, { status: res.status, headers });
 }
 
 function escapeAttr(s) {

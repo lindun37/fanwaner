@@ -115,20 +115,13 @@
     if (bowl.nickname) kv.push(esc(T("bowl.ownerKv", { name: bowl.nickname })));
     $("#d-kv").innerHTML = kv.join(" · ");
 
-    // 摆碗的本人可见「改一哈」+「复制管理链接」
+    // 摆碗的本人可见「改一哈」+「复制管理链接」。
+    // ⚠️ 必须先让服务端点头，才把后台入口放出来：以前只判 `if (token)`，
+    // 地址栏里随便挂个非空 token（?token=deadbeef 也算）就会把「改一哈 /
+    // 复制管理链接 / 待放行面板」全渲染出来 —— 看着就像后台被别人推开了。
+    // 现在要 /pending 真的返回 200 才认。
     const token = getEditToken(slug);
-    if (token) {
-      const btn = $("#btn-edit");
-      btn.classList.remove("hidden");
-      btn.onclick = () => { location.href = `/create.html?edit=${slug}&token=${encodeURIComponent(token)}`; };
-      const btnM = $("#btn-manage-link");
-      btnM.classList.remove("hidden");
-      btnM.onclick = async () => {
-        await copyText(`${location.origin}/${slug}?token=${encodeURIComponent(token)}`);
-        toast(T("bowl.manageCopiedToast"));
-      };
-      renderPending(token);
-    }
+    if (token) verifyOwner(token);
 
     renderRecords();
     buildDonateTabs();
@@ -151,32 +144,71 @@
     return token;
   }
 
+  // 令牌丢了就从本地缓存里清掉，免得以后每次打开都白试一遍
+  function forgetEditToken(slug2) {
+    try {
+      const raw = localStorage.getItem("bowl_edit_token");
+      if (!raw) return;
+      const item = JSON.parse(raw);
+      if (item && item.slug === slug2) localStorage.removeItem("bowl_edit_token");
+    } catch {}
+  }
+
+  // 服务端认了这个令牌才亮后台入口；不认就什么都不亮，跟普通访客看到的一样
+  async function verifyOwner(token) {
+    const ok = await renderPending(token);
+    if (!ok) {
+      forgetEditToken(slug);
+      return;
+    }
+    const btn = $("#btn-edit");
+    btn.classList.remove("hidden");
+    btn.onclick = () => { location.href = `/create.html?edit=${slug}&token=${encodeURIComponent(token)}`; };
+    const btnM = $("#btn-manage-link");
+    btnM.classList.remove("hidden");
+    btnM.onclick = async () => {
+      await copyText(`${location.origin}/${slug}?token=${encodeURIComponent(token)}`);
+      toast(T("bowl.manageCopiedToast"));
+    };
+  }
+
   /* ---------- 碗主人视角：待放行 + 已自动上墙 + 遭拒 ---------- */
+  // 返回 true = 服务端认这个令牌（是碗主人）；false = 不认，后台入口不应该出现
   async function renderPending(token) {
     const section = $("#pending-section");
     const list = $("#pending-list");
     const rejSection = $("#rejected-section");
     const rejList = $("#rejected-list");
-    section.classList.remove("hidden");
-    list.innerHTML = '<div class="spinner"></div>';
-    if (rejList) rejList.innerHTML = "";
 
     let items = [];
     let rejected = [];
     let approved = [];
+    let data;
     try {
-      const data = await get(`/api/bowl/${slug}/pending?token=${encodeURIComponent(token)}`);
-      items = data.pending || [];
-      rejected = data.rejected || [];
-      approved = data.approved || [];
-      // 已自动上墙时，待放行区块改叫「复核」：仍可把不实的那笔拒了
-      const autoMode = !!data.autoApprove;
-      $("#pending-title").textContent = autoMode ? T("bowl.reviewTitle") : T("bowl.pendingTitle");
-      $("#pending-hint").textContent = autoMode ? "" : T("bowl.pendingHint");
+      data = await get(`/api/bowl/${slug}/pending?token=${encodeURIComponent(token)}`);
     } catch (e) {
+      if (e && e.status === 401) {
+        // 令牌不对（伪造的、或者碗被重建过）：一个后台元素都别露出来
+        section.classList.add("hidden");
+        if (rejSection) rejSection.classList.add("hidden");
+        list.innerHTML = "";
+        return false;
+      }
+      // 网络抽风 / 服务端 5xx：令牌本身没毛病，保留入口，把原因写脸上
+      section.classList.remove("hidden");
       list.innerHTML = `<p style="color:var(--muted);">${esc(e.message || T("bowl.pendingLoadFailed"))}</p>`;
-      return;
+      return true;
     }
+
+    items = data.pending || [];
+    rejected = data.rejected || [];
+    approved = data.approved || [];
+    section.classList.remove("hidden");
+    if (rejList) rejList.innerHTML = "";
+    // 已自动上墙时，待放行区块改叫「复核」：仍可把不实的那笔拒了
+    const autoMode = !!data.autoApprove;
+    $("#pending-title").textContent = autoMode ? T("bowl.reviewTitle") : T("bowl.pendingTitle");
+    $("#pending-hint").textContent = autoMode ? "" : T("bowl.pendingHint");
 
     // 免放行模式下 pending 为空，但列出的 recent approved 同样可以拒
     const reviewList = items.length ? items : approved;
@@ -247,6 +279,8 @@
         });
       }
     }
+
+    return true;
   }
 
   /* ---------- 投喂记录 + 排行榜 ---------- */
