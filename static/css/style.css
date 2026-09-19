@@ -1043,8 +1043,13 @@ img { max-width: 100%; }
   gap: 10px;
   align-items: stretch;
 }
-.currency-select {
+/* ⚠️ 选择器必须带 .amount-row：.field select 的 specificity 是 (0,1,1)，
+   仅用 .currency-select (0,1,0) 覆盖不掉它的 width:100%。而 width 会参与
+   flex-basis:auto 的计算，加上 flex-shrink:0，下拉框会独占整行，
+   把金额输入框挤成约 30px 的窄条 —— 看起来就是「有币种、没金额」。 */
+.amount-row .currency-select {
   flex: 0 0 auto;
+  width: auto;
   min-width: 108px;
   padding: 10px 12px;
   border: 1.5px solid var(--line);
@@ -1057,6 +1062,7 @@ img { max-width: 100%; }
 }
 .amount-row input[type="number"] {
   flex: 1 1 auto;
+  width: auto; /* 同理覆盖 .field input 的 width:100% */
   min-width: 0;
 }
 
@@ -1072,5 +1078,6 @@ img { max-width: 100%; }
 
 @media (max-width: 520px) {
   .amount-row { flex-direction: column; }
-  .currency-select { width: 100%; }
+  .amount-row .currency-select,
+  .amount-row input[type="number"] { width: 100%; }
 }
