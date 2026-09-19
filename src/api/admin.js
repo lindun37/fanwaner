@@ -5,8 +5,20 @@ import { detectLocale, t } from "../lib/i18n.js";
 import { toMajor } from "../lib/currency.js";
 
 function auth(request, env) {
+  const key = env.ADMIN_KEY;
+  // 没配 ADMIN_KEY 时一律拒绝。否则下面的模板串会变成 "Bearer undefined"，
+  // 任何人都能拿这个可猜的字符串进后台（fail closed，不要 fail open）。
+  if (!key) return false;
+
   const header = request.headers.get("Authorization") || "";
-  return header === `Bearer ${env.ADMIN_KEY}`;
+  const expected = `Bearer ${key}`;
+  // 常数时间比较：长度不同也走完整轮循环，避免靠响应时间逐字节试出 key
+  let diff = header.length ^ expected.length;
+  const n = Math.max(header.length, expected.length);
+  for (let i = 0; i < n; i++) {
+    diff |= (header.charCodeAt(i) || 0) ^ (expected.charCodeAt(i) || 0);
+  }
+  return diff === 0;
 }
 
 function fmtDonation(r) {

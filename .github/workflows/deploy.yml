@@ -1,24 +1,60 @@
-# 饭碗儿 手动部署：不自动触发，每次在 Actions 页手动 Run workflow
-# 全部配置走 GitHub Secrets，部署者不需要本地装 wrangler / 命令行操作
+# Fanwaner — manual deploy. It does NOT run on push: trigger it from the
+# repository's Actions tab ("Run workflow"). Every credential comes from GitHub
+# Secrets, so the deployer needs neither wrangler nor a local CLI setup.
 name: Deploy
 
 on:
   workflow_dispatch:
 
+# One deployment at a time. Queue the next run instead of cancelling the current
+# one — an interrupted deploy can leave D1 migrations half-applied.
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
-          node-version: 20
+          # Node 20 is end-of-life; the project targets the current LTS line.
+          node-version: 22
           cache: npm
 
       - run: npm ci
 
-      # 从 GitHub Secrets 生成线上配置（D1 库 ID / Turnstile / R2 桶名）
+      # Catch the dangerous combinations before anything is deployed.
+      # Turnstile needs BOTH halves, and they fail in opposite directions:
+      #   sitekey only  -> the widget renders but the server skips verification,
+      #                    so the site looks protected while the API is open;
+      #   secret only   -> no widget, no token, so every submission is rejected.
+      # An empty ADMIN_KEY makes the admin API reject everything (fail closed).
+      - name: Sanity-check config
+        env:
+          TURNSTILE_SITE_KEY: ${{ secrets.TURNSTILE_SITE_KEY }}
+          TURNSTILE_SECRET_KEY: ${{ secrets.TURNSTILE_SECRET_KEY }}
+          ADMIN_KEY: ${{ secrets.ADMIN_KEY }}
+        run: |
+          if [ -n "${TURNSTILE_SITE_KEY}" ] && [ -z "${TURNSTILE_SECRET_KEY}" ]; then
+            echo "::warning::TURNSTILE_SITE_KEY is set but TURNSTILE_SECRET_KEY is not. The widget will render, but the server skips verification — anyone can POST to the API directly. Set both, or neither."
+          fi
+          if [ -z "${TURNSTILE_SITE_KEY}" ] && [ -n "${TURNSTILE_SECRET_KEY}" ]; then
+            echo "::warning::TURNSTILE_SECRET_KEY is set but TURNSTILE_SITE_KEY is not. No widget renders, so no token is ever produced and every donation/post will be rejected."
+          fi
+          if [ -z "${ADMIN_KEY}" ]; then
+            echo "::warning::ADMIN_KEY is not set. The admin API rejects every request by design, so you will not be able to moderate donations."
+          fi
+          echo "Config sanity check done."
+
+      # Build the production config from GitHub Secrets (D1 id / Turnstile
+      # sitekey / R2 bucket). Any value that is missing keeps whatever
+      # wrangler.toml already has, so the file stays runnable for local dev.
       - name: Generate prod config
         run: node scripts/gen-prod-config.mjs
         env:
@@ -26,27 +62,33 @@ jobs:
           TURNSTILE_SITE_KEY: ${{ secrets.TURNSTILE_SITE_KEY }}
           R2_BUCKET: ${{ secrets.R2_BUCKET }}
 
-      # 同步 D1 表结构（7 个迁移，含 0007_i18n 多币种）
+      # Apply the D1 schema (7 migrations, including 0007_i18n multi-currency).
       - name: Apply D1 migrations (remote)
-        uses: cloudflare/wrangler-action@v3
+        uses: cloudflare/wrangler-action@v4
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           command: d1 migrations apply fanwaner --remote --config wrangler.prod.toml
 
-      # 中文字体（OG 分享图用，约 16MB，Actions 里现下现传）
+      # OG share images need a font in R2. The default is the CJK font (~16MB).
+      # For an English-only deployment, switch to a Latin font (~300KB): change
+      # R2_FONT_KEY in wrangler.toml, the download target in
+      # scripts/download-font.mjs, and the object key in the step below.
       - name: Download font
         run: npm run font:download
 
       - name: Upload font to R2
-        uses: cloudflare/wrangler-action@v3
+        uses: cloudflare/wrangler-action@v4
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           command: r2 object put ${{ secrets.R2_BUCKET || 'fanwaner-assets' }}/fonts/NotoSansSC-Regular.otf --file=fonts/NotoSansSC-Regular.otf
 
-      # Worker Secrets：每次部署都同步一次（幂等，重复设没得问题）
-      - name: Set worker secrets
+      # Worker secrets, re-synced on every deploy (idempotent).
+      # Empty values are skipped on purpose: writing "" would overwrite a working
+      # secret with an empty one, and an empty ADMIN_KEY would authenticate
+      # against the literal string "Bearer ".
+      - name: Sync Worker secrets
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -55,14 +97,24 @@ jobs:
           ADMIN_KEY: ${{ secrets.ADMIN_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
         run: |
-          echo "$TURNSTILE_SECRET_KEY" | npx wrangler secret put TURNSTILE_SECRET_KEY --name fanwaner
-          echo "$SERVER_SECRET" | npx wrangler secret put SERVER_SECRET --name fanwaner
-          echo "$ADMIN_KEY" | npx wrangler secret put ADMIN_KEY --name fanwaner
-          echo "$TELEGRAM_BOT_TOKEN" | npx wrangler secret put TELEGRAM_BOT_TOKEN --name fanwaner
+          set -euo pipefail
 
-      # 部署 Worker
+          put_secret() {
+            local name="$1" value="$2"
+            if [ -z "${value}" ]; then
+              echo "::warning::${name} is not set in GitHub Secrets — skipping. The deployed Worker will not have it."
+              return 0
+            fi
+            printf '%s' "${value}" | npx wrangler secret put "${name}" --config wrangler.prod.toml
+          }
+
+          put_secret TURNSTILE_SECRET_KEY "${TURNSTILE_SECRET_KEY}"
+          put_secret SERVER_SECRET "${SERVER_SECRET}"
+          put_secret ADMIN_KEY "${ADMIN_KEY}"
+          put_secret TELEGRAM_BOT_TOKEN "${TELEGRAM_BOT_TOKEN}"
+
       - name: Deploy Worker
-        uses: cloudflare/wrangler-action@v3
+        uses: cloudflare/wrangler-action@v4
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
