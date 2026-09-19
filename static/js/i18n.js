@@ -96,10 +96,33 @@
   /* 金额格式化：后端统一存「最小单位整数」，前端按币种 + 语言显示 */
   var ZERO_DECIMAL = { JPY: 1, KRW: 1, VND: 1, CLP: 1 };
 
+  // 该币种的小数位（JPY/KRW 是 0，其余是 2）
+  function exponentOf(currency) {
+    var code = String(currency || "USD").toUpperCase();
+    return ZERO_DECIMAL[code] ? 0 : 2;
+  }
+
+  // 最小单位整数 → 主单位数字（填进 <input type=number> 用，不能带货币符号）
+  function toMajor(minor, currency) {
+    var exp = exponentOf(currency);
+    return Number(minor || 0) / Math.pow(10, exp);
+  }
+
+  // 主单位数字/字符串 → 最小单位整数；非法返回 null
+  function toMinor(value, currency) {
+    var code = String(currency || "USD").toUpperCase();
+    var n = typeof value === "number" ? value : parseFloat(String(value == null ? "" : value).replace(/,/g, ""));
+    if (!isFinite(n) || n <= 0) return null;
+    var exp = exponentOf(code);
+    var minor = Math.round(n * Math.pow(10, exp));
+    if (Math.abs(n * Math.pow(10, exp) - minor) > 1e-6) return null;
+    return minor <= 0 ? null : minor;
+  }
+
   function money(minor, currency, locale) {
     var code = (currency || "USD").toUpperCase();
     var lang = locale || current;
-    var exp = ZERO_DECIMAL[code] ? 0 : 2;
+    var exp = exponentOf(code);
     var n = Number(minor || 0) / Math.pow(10, exp);
     try {
       return new Intl.NumberFormat(lang === "zh" ? "zh-CN" : lang, {
@@ -240,6 +263,9 @@
     list: list,
     pick: pick,
     money: money,
+    exponentOf: exponentOf,
+    toMajor: toMajor,
+    toMinor: toMinor,
     setLang: setLang,
     onReady: onReady,
     applyDom: applyDom,

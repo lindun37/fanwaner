@@ -79,9 +79,15 @@ export function isValidPayPalLink(u) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(s);
 }
 
-// Stripe：payment link / checkout 链接（也可以直接给 https 链接）
+// Stripe：payment link / checkout 链接（也可以直接给任意 https 链接）
+// 注意：这里同时也接受 Stripe 之外的托管收款页（如 donate.stripe.com 之外的第三方），
+//       所以只做「是不是一个像样的 https 地址」的判断，不锁死域名。
 export function isValidStripeUrl(u) {
-  return typeof u === "string" && /^https:\/\/(buy\.stripe\.com\/|checkout\.stripe\.com\/|donate\.stripe\.com\/|https?:\/\/)[\w\-./?=&%]{0,180}$/.test(u.trim());
+  if (typeof u !== "string") return false;
+  const s = u.trim();
+  if (!s || s.length > 200) return false;
+  if (/^https:\/\/(buy|checkout|donate)\.stripe\.com\/[\w\-./?=&%]{1,180}$/i.test(s)) return true;
+  return /^https:\/\/[a-z0-9-]+(\.[a-z0-9-]+)+\/[\w\-./?=&%]{0,180}$/i.test(s);
 }
 
 // Ko-fi：https://ko-fi.com/xxx

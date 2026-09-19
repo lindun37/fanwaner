@@ -78,7 +78,7 @@ export default {
       // OG 分享图
       const ogMatch = path.match(/^\/og\/([a-z0-9](?:[a-z0-9-]{1,18})[a-z0-9])\.png$/);
       if (ogMatch) {
-        return handleOg(env, ogMatch[1]);
+        return handleOg(env, ogMatch[1], request);
       }
 
       // 饭碗儿详情页（OG meta 动态注入）：老式 /bowl.html?slug=xxx 兼容
@@ -95,7 +95,7 @@ export default {
       // 其余静态资源
       return serveStatic(env, request);
     } catch (err) {
-      console.error("碗儿翻了：", err);
+      console.error("Unhandled error:", err);
       return fail(ERR.SERVER_ERROR, t(locale, "err.serverError"), 500);
     }
   },

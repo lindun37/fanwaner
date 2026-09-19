@@ -165,6 +165,15 @@
     toast, alertCenter,
     money, yuan, fmtTime, fmtDate,
     progressText, mealState, pick,
-    T, PICK, MONEY,
+    T, PICK, MONEY, LANG,
+    // 金额的「主单位 ↔ 最小单位」换算一律走这里，别在各页面写死 /100
+    // （JPY / KRW 没有小数位，写死 /100 会差 100 倍）
+    exponentOf: (currency) =>
+      window.I18N ? window.I18N.exponentOf(currency) : (["JPY", "KRW"].includes(String(currency || "").toUpperCase()) ? 0 : 2),
+    toMajor: (minor, currency) =>
+      window.I18N ? window.I18N.toMajor(minor, currency) : Number(minor || 0) / 100,
+    toMinor: (value, currency) =>
+      window.I18N ? window.I18N.toMinor(value, currency) : Math.round(Number(value || 0) * 100),
+    get lang() { return LANG(); },
   };
 })();

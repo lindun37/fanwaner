@@ -1,9 +1,19 @@
 // OG 分享图生成：cf-workers-og（Satori + resvg WASM）渲染 1200×630 PNG
-// 中文字体从 R2 加载（不打包进 Worker，控制体积），模块级缓存字体字节。
+// 字体从 R2 加载（不打包进 Worker，控制体积），模块级缓存字体字节。
+// 国际化：所有可见文案由调用方（src/api/og.js）按语言算好后传进来，
+//          这里只管排版，不再写死中文。
 import { ImageResponse, CustomFont } from "cf-workers-og/html";
 
-const FONT_NAME = "NotoSansSC";
+const DEFAULT_FONT_NAME = "NotoSansSC";
 const fontCache = new Map(); // R2_FONT_KEY -> ArrayBuffer
+
+// 从 R2 key 猜字体名：fonts/NotoSansSC-Regular.otf → NotoSansSC
+// 换成拉丁字体时（fonts/NotoSans-Regular.ttf）不用额外配置就能对上。
+export function guessFontName(key) {
+  const base = String(key || "").split("/").pop() || "";
+  const name = base.replace(/\.[A-Za-z0-9]+$/, "").replace(/[-_](Regular|Bold|Medium|Light)$/i, "");
+  return name || DEFAULT_FONT_NAME;
+}
 
 async function loadFont(bucket, key) {
   if (fontCache.has(key)) return fontCache.get(key);
@@ -74,24 +84,31 @@ function logoDataUri() {
 }
 
 // 生成 OG 图 HTML（Satori 子集：flexbox + 基础样式）
-export function ogHtml({ title, currentYuan, targetYuan, percent, statusText }) {
-  const t = stripEmoji(title).slice(0, 50) || "今天想吃口饭";
-  const c = Number(currentYuan || 0).toFixed(0);
-  const g = Number(targetYuan || 0).toFixed(0);
+// 所有文案都来自调用方，这里只做排版，所以天然支持任意语言。
+export function ogHtml({
+  title,
+  amountText = "",
+  percent,
+  statusText = "",
+  stateText = "",
+  brand = "Fanwaner",
+  fallbackTitle = "Just trying to get a meal",
+  fontName = DEFAULT_FONT_NAME,
+}) {
+  const head = stripEmoji(title).slice(0, 50) || fallbackTitle;
   const p = Math.max(0, Math.min(100, Number(percent) || 0));
   const barColor = p >= 100 ? "#e23a3a" : "#e8a33d";
-  const status = statusText || (p >= 100 ? "吃饱喽！收碗！" : "还在讨生活");
-  const state = p >= 100 ? "吃饱喽！" : p >= 90 ? "差最后一口" : p >= 60 ? "马上吃饱" : p >= 30 ? "饭有着落了" : p > 0 ? "开始有饭了" : "还没吃上一口";
+  const status = statusText || stateText;
 
-  return `<div style="display:flex; flex-direction:row; width:1200px; height:630px; background:#fbf4e4; padding:64px 72px; font-family:'${FONT_NAME}'">
+  return `<div style="display:flex; flex-direction:row; width:1200px; height:630px; background:#fbf4e4; padding:64px 72px; font-family:'${fontName}'">
     <div style="display:flex; flex-direction:column; flex:1; justify-content:space-between; height:100%;">
       <div style="display:flex; flex-direction:row; align-items:center; gap:16px;">
         <img src="${logoDataUri()}" style="width:56px; height:56px;" />
-        <span style="font-size:30px; color:#a5712f;">饭碗儿</span>
+        <span style="font-size:30px; color:#a5712f;">${escapeHtml(brand)}</span>
       </div>
       <div style="display:flex; flex-direction:column; gap:24px;">
-        <div style="font-size:52px; line-height:1.35; color:#5a4632; font-weight:700; max-width:640px; display:flex; flex-wrap:wrap;">${escapeHtml(t)}</div>
-        <div style="display:flex; flex-direction:row; align-items:baseline; gap:6px; font-size:30px; color:#8a6d4d;"><span style="color:#d98a1f; font-weight:700;">${state}</span> · ¥${c} / ¥${g}</div>
+        <div style="font-size:52px; line-height:1.35; color:#5a4632; font-weight:700; max-width:640px; display:flex; flex-wrap:wrap;">${escapeHtml(head)}</div>
+        <div style="display:flex; flex-direction:row; align-items:baseline; gap:6px; font-size:30px; color:#8a6d4d;"><span style="color:#d98a1f; font-weight:700;">${escapeHtml(stateText)}</span> · ${escapeHtml(amountText)}</div>
         <div style="display:flex; flex-direction:row; align-items:center; gap:20px;">
           <div style="display:flex; flex:1; height:22px; background:#efe0c0; border-radius:11px; overflow:hidden;">
             <div style="width:${p}%; height:100%; background:${barColor}; border-radius:11px;"></div>
@@ -103,7 +120,7 @@ export function ogHtml({ title, currentYuan, targetYuan, percent, statusText }) 
     </div>
     <div style="display:flex; flex-direction:column; align-items:flex-end; justify-content:center; gap:16px;">
       <img src="${svgDataUri(bowlIllustration())}" style="width:420px; height:420px;" />
-      <span style="font-size:26px; color:#c9a86b;">饭碗儿</span>
+      <span style="font-size:26px; color:#c9a86b;">${escapeHtml(brand)}</span>
     </div>
   </div>`;
 }
@@ -111,12 +128,14 @@ export function ogHtml({ title, currentYuan, targetYuan, percent, statusText }) 
 // 渲染 PNG（返回 Response）
 export async function renderOg(env, data) {
   const fontKey = env.R2_FONT_KEY || "fonts/NotoSansSC-Regular.otf";
+  // 字体名从 key 推导，也可以用 OG_FONT_NAME 显式指定
+  const fontName = env.OG_FONT_NAME || guessFontName(fontKey);
   const fontBuf = await loadFont(env.BUCKET, fontKey);
   const fonts = fontBuf
-    ? [new CustomFont(FONT_NAME, fontBuf, { weight: 400 })]
-    : undefined; // 没配字体也能出图（英文/数字），中文会变豆腐块，README 会说明
+    ? [new CustomFont(fontName, fontBuf, { weight: 400 })]
+    : undefined; // 没配字体也能出图（拉丁字母/数字），中文会变豆腐块，README 会说明
 
-  return ImageResponse.create(ogHtml(data), {
+  return ImageResponse.create(ogHtml({ ...data, fontName }), {
     width: 1200,
     height: 630,
     fonts,

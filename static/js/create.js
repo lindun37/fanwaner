@@ -68,11 +68,11 @@
       $("#reason").value = editBowl.reason;
       $("#nickname").value = editBowl.nickname;
       $("#currency").value = editBowl.currency || $("#currency").value;
-      // 金额按币种主单位回显（JPY 等零小数位币种不能简单 /100）
-      const exp = ["JPY", "KRW"].includes(editBowl.currency) ? 0 : 2;
+      // 金额按币种主单位回显（JPY 等零小数位币种不能简单 /100，统一走 I18N）
+      const exp = FW.exponentOf(editBowl.currency);
       $("#targetAmount").value =
         editBowl.targetMinor != null
-          ? (editBowl.targetMinor / 10 ** exp).toFixed(exp)
+          ? FW.toMajor(editBowl.targetMinor, editBowl.currency).toFixed(exp)
           : (editBowl.targetYuan || "");
       if (editBowl.deadline) {
         const d = new Date(editBowl.deadline);
@@ -104,7 +104,7 @@
       lead.after(jump);
 
       if (editBowl.currentMinor > 0) {
-        $("#targetAmount").setAttribute("min", editBowl.currentMinor / 10 ** exp);
+        $("#targetAmount").setAttribute("min", FW.toMajor(editBowl.currentMinor, editBowl.currency));
         const hint = document.createElement("small");
         hint.className = "hint";
         hint.textContent = T("create.editMinHint", { amount: FW.money(editBowl.currentMinor, editBowl.currency) });
@@ -396,6 +396,8 @@
       title: v.title, want: v.want, reason: v.reason,
       targetAmount: Number(v.targetAmount),
       currency: v.currency,
+      // 记下摆碗时用的界面语言：通知正文和 OG 分享图都按它出文案
+      language: FW.lang,
       deadline: v.deadline,
       nickname: v.nickname,
       avatarUrl: uploads.avatar || undefined,

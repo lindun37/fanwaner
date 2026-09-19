@@ -1,5 +1,6 @@
 // D1 查询小工具
 import { t } from "./i18n.js";
+import { toMajor } from "./currency.js";
 
 // 判断 D1 异常是否为 UNIQUE 约束冲突
 export function isUniqueConflict(err) {
@@ -28,9 +29,9 @@ export function formatBowl(row) {
     // 新：最小单位整数 + 币种，交给前端 Intl 格式化
     targetMinor: row.target_cents,
     currentMinor: row.current_cents,
-    // 兼容旧前端（仅对两位小数币种正确）
-    targetYuan: row.target_cents / 100,
-    currentYuan: row.current_cents / 100,
+    // 兼容旧前端：按币种换算（JPY/KRW 零小数位，不能写死 /100）
+    targetYuan: toMajor(row.target_cents, currency),
+    currentYuan: toMajor(row.current_cents, currency),
     percent: Math.min(100, Math.round((row.current_cents / row.target_cents) * 100)),
     deadline: row.deadline,
     wechatQr: row.wechat_qr,
@@ -73,15 +74,19 @@ export function formatBowl(row) {
 
 export function formatDonation(row, locale = "en") {
   if (!row) return null;
-  const anon = row.is_anonymous ? t(locale, "feed.anonymous") : (row.nickname || t(locale, "feed.passerby"));
+  const anon = row.is_anonymous
+    ? t(locale, "feed.anonymous") || "Anonymous"
+    : row.nickname || t(locale, "feed.passerby") || "Passer-by";
+  const currency = row.currency || "CNY";
   return {
     id: row.id,
     // nickname 是「可显示名」：匿名时用本地化的「匿名用户」占位
     nickname: anon,
     rawNickname: row.nickname || "",
     amountMinor: row.amount_cents,
-    currency: row.currency || "CNY",
-    amountYuan: row.amount_cents / 100, // 兼容旧前端
+    currency,
+    // 兼容旧前端：按币种换算（JPY/KRW 零小数位，不能写死 /100）
+    amountYuan: toMajor(row.amount_cents, currency),
     message: row.message,
     paymentMethod: row.payment_method,
     txid: row.txid,

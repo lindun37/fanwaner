@@ -3,8 +3,10 @@
 import { renderOg } from "../lib/og-render.js";
 import { getBowlBySlug } from "../lib/db.js";
 import { isValidSlug } from "../lib/validate.js";
+import { detectLocale, t, tp } from "../lib/i18n.js";
+import { formatShort } from "../lib/currency.js";
 
-export async function handleOg(env, slug) {
+export async function handleOg(env, slug, request) {
   if (!isValidSlug(slug)) return notFound();
 
   // 先读 R2 缓存
@@ -21,18 +23,24 @@ export async function handleOg(env, slug) {
   const bowl = await getBowlBySlug(env.DB, slug);
   if (!bowl) return notFound();
 
+  // 语言优先用「摆碗时存下来的语言」—— 这样分享图跟碗主人在页面上看到的一致，
+  // 不被爬虫的 Accept-Language 左右；没有记录时才回落到请求头判定。
+  const locale = bowl.language || (request ? detectLocale(request, env) : "en");
+  const stateOf = tp(locale, "og.stateOf") || (() => "");
+  const statusOf = tp(locale, "og.statusOf") || (() => "");
+
   const percent = Math.min(100, Math.round((bowl.current_cents / bowl.target_cents) * 100));
-  let statusText = "还在讨生活";
-  if (bowl.status === "completed") statusText = "吃饱喽！收碗！";
-  else if (bowl.status === "expired") statusText = "这口饭已经凉了。";
-  else if (bowl.status === "hidden") statusText = "这口饭收起来了。";
+  const currency = bowl.currency || "CNY";
 
   const res = await renderOg(env, {
     title: bowl.title,
-    currentYuan: bowl.current_cents / 100,
-    targetYuan: bowl.target_cents / 100,
+    // 直接给「已经格式化好、带币种符号」的字符串，OG 图里不再拼 ¥
+    amountText: `${formatShort(bowl.current_cents, currency)} / ${formatShort(bowl.target_cents, currency)}`,
     percent,
-    statusText,
+    stateText: stateOf(percent),
+    statusText: statusOf(bowl.status),
+    brand: t(locale, "og.brand") || "Fanwaner",
+    fallbackTitle: t(locale, "og.fallbackTitle") || "Just trying to get a meal",
   });
 
   // 存 R2 供后续直接读

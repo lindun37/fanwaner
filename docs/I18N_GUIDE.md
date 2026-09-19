@@ -23,7 +23,7 @@
 
 ## 二、我已经帮你做好的部分（可直接用）
 
-这一轮我落了 5 块基础设施，语法已校验通过，中英文案 203 个 key 完全对齐：
+这一轮我落了 5 块基础设施，语法已校验通过，中英文案 key 完全对齐：
 
 ### ✅ 1. 服务端 i18n / 多币种内核
 
@@ -41,7 +41,7 @@
 | 文件 | 作用 |
 |---|---|
 | `static/js/i18n.js` | 零依赖运行时：`data-i18n` 自动渲染、`I18N.t()`、`I18N.money()`、语言切换、`<html lang>` 同步 |
-| `static/i18n/en.json` / `zh.json` | 203 个 key 的完整 UI 文案，含 `{name}` 占位符 |
+| `static/i18n/en.json` / `zh.json` | 完整 UI 文案包（365 条 key，数组展开后 393 条），含 `{name}` 占位符 |
 | `static/index.html` / `create.html` / `bowl.html` / `404.html` | 已全部改成 `data-i18n` 驱动，加了语言切换器和币种下拉 |
 | `static/css/style.css` | 新增 `.lang-switch` / `.currency-select` / `.pay-group-label` 样式；**字体栈改为拉丁字体优先** |
 | `wrangler.toml` | 新增 `DEFAULT_LOCALE=en`、`DEFAULT_CURRENCY=USD`、`NTFY_API` |
@@ -70,7 +70,7 @@ Discord Webhook、Slack Webhook、ntfy、Pushover、通用 Webhook（Zapier/Make
 | `static/js/create.js` | 币种下拉、三组支付 tab 联动、全部新字段收集、校验提示字段定位 |
 | `static/js/admin.js` | 后台表格、状态、支付方式、确认弹窗 |
 
-文案包：**393 个 key，中英完全对齐**（有校验脚本，见第六节）。
+文案包：**365 条 key，中英完全对齐**（数组展开后 393 条；`npm run check` 会校验）。
 
 ### ✅ 6. 英文示例改为西式食物
 
@@ -103,29 +103,31 @@ Discord Webhook、Slack Webhook、ntfy、Pushover、通用 Webhook（Zapier/Make
 
 ---
 
-## 三、还需要你完成的改造（按优先级分批）
+## 三、剩余事项（P0 已全部完成）
 
-下面是我**还没动**的部分，按 P0→P2 排好，每步都给了具体改法。
+**P0 全部落地，服务端与前端的国际化已经闭环。** 剩下只有「执行迁移」这一件必做动作，
+以及 P1/P2 的体验优化。
 
 ---
 
-### ✅ P0 —— 已全部完成
+### ✅ P0 —— 全部完成
 
 - [x] **P0-1 数据库迁移** → `migrations/0007_i18n.sql` 已就绪（**执行前必须备份**，见下）
-- [x] **P0-2 `bowls.js` 接收 `currency` / `language`** → 待办见下方「仍需你确认」
-- [x] **P0-3 硬编码中文报错换 `t(locale, ...)`** → 已全部替换
-- [x] **P0-4 `db.js` 输出最小单位 + 币种** → 已加 `currentMinor` / `targetMinor` / `currency`，旧字段保留兼容
-- [x] **P0-5 `create.js` 读新字段** → 已完成（含币种下拉、三组 tab、全部新字段）
+- [x] **P0-2 `bowls.js` 接收并落库 `currency` / `language`** → 已写入 INSERT / UPDATE
+- [x] **P0-3 硬编码中文报错换 `t(locale, ...)`** → `bowls.js`（54 处）、`upload.js`（5 处）全部替换
+- [x] **P0-4 `db.js` 输出最小单位 + 币种** → `currentMinor` / `targetMinor` / `currency`，
+      旧字段 `currentYuan` / `targetYuan` 保留兼容，且已按币种换算（JPY/KRW 不再被 ×100 错算）
+- [x] **P0-5 `create.js` 读新字段** → 币种下拉、三组支付 tab、全部新字段、提交时带 `language`
 - [x] **P0-6 `bowl.js` / `index.js` / `admin.js` 动态文案** → 已完成
+- [x] **P0-7 OG 图与分享 meta 国际化** → `og.js` / `og-render.js` / `assets.js` 全部走文案包，
+      金额按币种输出，字体名可从 `R2_FONT_KEY` 自动推导
 
 ---
 
-### 🔴 仍需你手动做的三件事
-
-#### 1. 执行数据库迁移（**会重建两张表**）
+### 🔴 仍需你手动做的一件事：执行数据库迁移
 
 ```bash
-# 先备份！
+# 先备份！（0007 会重建 bowls 和 donations 两张表）
 npx wrangler d1 export fanwaner --remote --output backup.sql
 # 本地
 npx wrangler d1 migrations apply fanwaner --local
@@ -133,28 +135,18 @@ npx wrangler d1 migrations apply fanwaner --local
 npx wrangler d1 migrations apply fanwaner --remote
 ```
 
-#### 2. `createBowl` 落库时写入 `currency` / `language`
+> 用 GitHub Actions 部署的话，「部署 D1 迁移」这一步 CI 会自动跑，
+> 但**备份仍然只能你手动做**——CI 不会替你备份。
 
-`src/api/bowls.js` 的 `createBowl` 目前 `INSERT` 语句还没带这两列（这个文件的其余部分已改完）。
-在 `INSERT INTO bowls (...)` 的列和 `VALUES` 占位符里分别加上 `currency, language`，
-绑定值用：
+**迁移之后建议顺手做一次自检**（验证 SQL 字段数、中英文案 key 是否对齐、有无残留中文）：
 
-```js
-const locale = detectLocale(request, env);
-const currency = normalizeCurrency(body.currency || env.DEFAULT_CURRENCY || "USD");
-// ... .bind(..., currency, locale === "zh" ? "zh" : "en", ...)
+```bash
+npm run check
 ```
-
-`updateBowl` 的 `UPDATE` 同理加上 `currency=?`（`language` 不随编辑变）。
-
-#### 3. OG 图仍用中文字体
-
-`src/lib/og-render.js` 与 `src/assets.js` 的文案还是中文（「饭碗儿」「还在讨生活」）。
-处理方式见下面 P1-1 / P1-3。**这条不影响页面，只影响分享卡片。**
 
 ---
 
-### 🟡 P1 · 不做也能跑，但海外体验不完整
+### 🟡 P1 · 可选优化
 
 #### P1-1 OG 图换拉丁字体（省 16MB）
 
@@ -179,37 +171,47 @@ npm run font:download && npm run font:upload
 **更好的做法**：按碗主人的语言选字体——`bowl.language === 'zh'` 用中文字体，否则用拉丁字体。
 在 `src/lib/og-render.js` 的 `renderOg` 里加个分支即可。
 
-#### P1-2 `src/lib/og-render.js` 文案国际化
+#### ✅ P1-2 `src/lib/og-render.js` 文案国际化（已完成）
 
-现在 OG 图里的「饭碗儿」「还在讨生活」「吃饱喽！」都是写死的。改成：
-
-```js
-import { t } from "./i18n.js";
-import { formatShort } from "./currency.js";
-
-export function ogHtml({ title, currentMinor, targetMinor, percent, statusText, locale = "en", currency = "USD" }) {
-  const L = locale;
-  const brand = t(L, "og.brand");
-  const state = percent >= 100 ? t(L, "og.state100")
-              : percent >= 90 ? t(L, "og.state90")
-              : percent >= 60 ? t(L, "og.state60")
-              : percent >= 30 ? t(L, "og.state30")
-              : t(L, "og.state0");
-  // ¥ 也要换掉
-  const money = `${formatShort(currentMinor, currency)} / ${formatShort(targetMinor, currency)}`;
-  ...
-}
-```
-
-#### P1-3 `src/assets.js`：OG meta 与 `<html lang>` 注入
-
-`assets.js` 现在拼的 meta description 是中文模板。改成按 `bowl.language` 走
-`locales.og.metaDesc`（我在 `locales.js` 里已经写好了这个函数）。
-同时把 `bowl.html` 里的 `<html lang="en">` 替换成实际语言：
+原来 OG 图里的「饭碗儿」「还在讨生活」「吃饱喽！」以及 `¥` 都是写死的。
+现在给 `i18n.js` 加了 `tp(locale, path)`（取函数型 / 数组型文案节点），
+于是 `og-render.js` 只负责排版，文案全部由调用方传入：
 
 ```js
-html = html.replace('<html lang="en">', `<html lang="${bowl.language === "zh" ? "zh-CN" : "en"}">`);
+// src/api/og.js
+const locale = bowl.language || detectLocale(request, env);
+const stateOf  = tp(locale, "og.stateOf");   // (percent) => "Almost full"
+const statusOf = tp(locale, "og.statusOf");  // (status)  => "Still hungry"
+renderOg(env, {
+  title: bowl.title,
+  amountText: `${formatShort(bowl.current_cents, currency)} / ${formatShort(bowl.target_cents, currency)}`,
+  percent,
+  stateText: stateOf(percent),
+  statusText: statusOf(bowl.status),
+  brand: t(locale, "og.brand"),
+});
 ```
+
+顺带解决的问题：
+
+- `¥` 写死 → 改成按饭碗儿的币种输出（`$15 / $40`、`¥1,200 / ¥3,000`）
+- OG 图缓存 key 仍是 `og/:slug.png`，语言取**摆碗时存下的 `language`**，
+  不受爬虫 `Accept-Language` 影响 —— 分享图和碗主人自己看到的一致
+- 字体名不再写死：从 `R2_FONT_KEY` 自动推导（`NotoSans-Regular.ttf` → `NotoSans`），
+  换拉丁字体不用改代码，必要时用 `OG_FONT_NAME` 覆盖
+
+#### ✅ P1-3 `src/assets.js`：OG meta 与 `<html lang>` 注入（已完成）
+
+`serveBowHtml` 与 `serveStatic` 现在都按 `detectLocale()` 的结果出文案，
+并用 `og.siteTitle` / `og.siteDesc` / `og.pageTitle` / `og.bowlMetaDesc` / `og.ogDesc`
+替换掉原来的中文模板；同时把 `<html lang="en">` 换成实际语言：
+
+```js
+.replace(/<html lang="[^"]*"/, `<html lang="${locale === "zh" ? "zh-CN" : locale}"`)
+```
+
+> 页面内（JS 生效后）`I18N.setLang()` 也会同步更新 `document.documentElement.lang`，
+> 所以爬虫和读屏软件拿到的语言属性都是对的。
 
 #### P1-4 日期格式
 
@@ -242,45 +244,54 @@ const rtf = new Intl.RelativeTimeFormat(I18N.lang, { numeric: "auto" });
 
 我已经写的英文文案走的就是这个方向，你可以直接在 `static/i18n/en.json` 里调。
 
-#### P2-2 写一份英文 README
+#### ✅ P2-2 英文 README（已完成）
 
-现在的 README 是 326 行全中文。建议：
-
-- `README.md` 改成英文（主战场是海外），中文版挪到 `README.zh-CN.md`
-- 在 README 顶部加徽章和一句话定位
-- 补一节 **How to accept payments internationally**（说明支持哪些渠道）
+- `README.md` 已改写为英文（面向海外开发者：Quick start、部署、API、i18n、Disclaimer）
+- 中文原版完整保留在 `README.zh-CN.md`，两个文件顶部互相加了链接
+- 补了一节 **Why "Fanwaner"?** 说明品牌取舍，以及 **Adding a language** 说明怎么加语言
+- 补了多币种 / 支付渠道矩阵、通知渠道表、`AUTO_APPROVE_DONATIONS` 行为说明
+- `package.json` 的 `description` 也换成了英文
+- ⚠️ 英文版里**故意没有放打赏地址**（那是上游作者的），只给了指向中文版的链接。
+  你自己部署的话，记得换成你的收款方式。
 
 #### P2-3 合规与隐私
 
 - **Cookie 同意**：我在 `i18n.js` 里写了 `lang` cookie（功能型，通常免同意），
   但如果接了 GA/Umami 等统计，欧盟用户需要 cookie banner
 - **IP 哈希**：项目已经只存 IP 哈希，这一点对 GDPR 很友好，值得在 README 里强调
-- **免责声明英文版**：「不是支付平台、不托管资金」这段必须有英文版，海外用户对这类事更敏感
+- **免责声明英文版**：已在英文 README 里写好（"not a payment platform" 那段）
 
-#### P2-4 打赏二维码
+#### P2-4 打赏入口
 
-`README.md` 底部和 `static/img/donate/` 里只有微信、支付宝、USDT。
-补上 PayPal / Ko-fi 的链接和二维码，否则海外用户想谢你都找不到入口。
+`static/img/donate/` 里只有微信、支付宝、USDT（TRC20 / BEP20）的收款图。
+你的部署如果想接受海外打赏，建议补上 PayPal / Ko-fi 的链接或二维码。
+
+> 英文版 README 里的 Support 一节目前指向中文版的打赏区（上游作者的地址），
+> **换成你自己的再发布**，否则钱会打到别人账上。
 
 #### P2-5 时区
 
-D1 里 `datetime('now')` 是 UTC。海外用户设「今晚 12 点收碗」时会差 8 小时。
-建议在 create 页面让用户选时区，或至少在文案里标注「按 UTC 计算」。
+D1 里 `datetime('now')` 是 UTC。
+**前端显示已经修好了**（`api.js` 的 `fmtTime` 原来写死 +8 小时按北京时间算，
+现在按访客本地时区渲染）。
+剩下的问题是**语义**：用户选「今晚 12 点收碗」时，提交的是本地时间字符串，
+库里的比较基准是 UTC —— 跨时区场景下截止时间会偏。彻底解决需要让用户显式选时区，
+或统一在提交前转成 UTC ISO 串。
 
 ---
 
 ## 四、建议的落地顺序
 
 ```
-第 1 天   P0-1 迁移 + P0-2 后端接币种      → 数据层通了
-第 2 天   P0-3 报错 i18n + P0-4 db.js      → 后端文案通了
-第 3 天   P0-5 create.js + P0-6 bowl.js    → 前端能建、能投、能切语言
-第 4 天   P1 OG 图字体与文案               → 分享卡片好看
-第 5 天   P2 品牌定调 + 英文 README        → 可以对外发
+第 1 天   P0-1 迁移 + P0-2 后端接币种      → 数据层通了    ✅ 已完成
+第 2 天   P0-3 报错 i18n + P0-4 db.js      → 后端文案通了  ✅ 已完成
+第 3 天   P0-5 create.js + P0-6 bowl.js    → 前端能建能投  ✅ 已完成
+第 4 天   P1 OG 图字体与文案               → 分享卡片好看  ✅ 已完成
+第 5 天   P2 品牌定调 + 英文 README        → 可以对外发    ✅ 已完成
 ```
 
-每完成一批就 `npm run dev` 走一遍完整流程：
-**建碗（选 USD + PayPal）→ 详情页 → 投一口 → 后台放行 → 切英文/中文看有没有漏网文案**。
+下一步只剩：**跑迁移 + `npm run check` + 本地 `npm run dev` 走一遍完整流程**：
+**建碗（选 USD + PayPal）→ 详情页 → 投一口 → 看是否直接上墙 → 拒掉它看金额有没有扣回 → 切英文/中文看有没有漏网文案**。
 
 ---
 
@@ -290,36 +301,39 @@ D1 里 `datetime('now')` 是 UTC。海外用户设「今晚 12 点收碗」时�
 - [ ] 点语言切换器能实时切中/英，动态渲染的列表、弹窗也跟着变
 - [ ] 建碗时能选币种，金额显示 `$30` 而不是 `¥30`
 - [ ] 能填 PayPal / Stripe / Ko-fi / BTC 并成功保存
+- [ ] **编辑时币种能改**（还没人投过）；有人投过后改币种应被拒
 - [ ] 投一口时支付 tab 只显示碗主人填过的渠道
+- [ ] 投一口默认**直接上墙**，碗主人事后拒掉后金额被扣回
 - [ ] Discord Webhook 能收到留言提醒，且金额带正确币种符号
 - [ ] JPY 这类零小数位币种不会被 DB CHECK 卡住
-- [ ] OG 分享图在 Twitter/X、Discord 里预览正常，无豆腐块
+- [ ] OG 分享图在 X、Discord 里预览正常，无豆腐块，金额是 `$` 不是 `¥`
 - [ ] `README.md` 是英文，部署步骤海外用户能照做
-- [ ] 全站搜一遍，没有残留硬编码中文（除 `zh.json` 和注释）
+- [ ] `npm run check` 全绿
 
 搜索残留的命令（这是验收的硬指标）：
 
 ```bash
-NODE=node   # 或用你的 node 路径
+# 一条命令跑完 4 项检查（SQL 字段数 / 服务端文案 key / 前端文案 key / 残留中文）
+npm run check
+```
 
+它做了这些事（想手动复查也可以）：
+
+```bash
 # 1) 前端 JS 里不该再有中文（唯一允许：i18n.js 里的语言名 "中文"）
 grep -rPn '"[^"]*[\x{4e00}-\x{9fff}]' static/js/*.js | grep -vE ':\s*(//|\*)'
 
 # 2) HTML 里不该再有硬编码中文文本
 grep -rPn '>[^<>]*[\x{4e00}-\x{9fff}]' static/*.html | grep -v data-i18n
 
-# 3) 中英文案包 key 必须完全对齐（当前 393 : 393）
-$NODE -e "
-const en=require('./static/i18n/en.json'), zh=require('./static/i18n/zh.json');
-const flat=(o,p='')=>Object.entries(o).flatMap(([k,v])=>Array.isArray(v)?flat(v,p+k+'.'):(typeof v==='object'&&v?flat(v,p+k+'.'):[p+k]));
-const a=new Set(flat(en)), b=new Set(flat(zh));
-console.log('en:',a.size,'zh:',b.size);
-console.log('缺英文:',[...b].filter(k=>!a.has(k)).join(', ')||'无');
-console.log('缺中文:',[...a].filter(k=>!b.has(k)).join(', ')||'无');
-"
+# 3) 服务端脚本里不该再有中文（locales.js 除外）
+grep -rPn '"[^"]*[\x{4e00}-\x{9fff}]' src/index.js src/assets.js src/api/*.js src/lib/*.js
 ```
 
-**建议把第 3 条挂到 CI**（`.github/workflows/`），否则以后加 key 漏翻译没人发现。
+当前基线：**前端文案包 en=365 zh=365 完全对齐；服务端 err 64 / notify 11 / og 18 / feed 2 全部对齐；
+硬编码中文残留 = 0**。
+
+**建议把 `npm run check` 挂到 CI**（`.github/workflows/`），否则以后加 key 漏翻译、或者改 SQL 漏字段都没人发现。
 
 ---
 
@@ -381,7 +395,7 @@ return fail(ERR.VALIDATION_ERROR, t(locale, "err.badAmount"));
 5. **`i18n` 已加入 `RESERVED_SLUGS`** —— 用户不能把 `i18n` 当碗的后缀，否则会撞静态资源路由
 6. **方言别硬翻** —— 「耿直人」翻成 "straightforward person" 没人懂，英文版用 "kind soul" / "supporter" 更自然
 7. **免放行模式不是「取消审核」** —— 它只是把审核从「事前」挪到「事后」。碗主人/后台仍可通过 reject 撤下一笔，金额会自动扣回（已用 `MAX(0, ...)` 兜底，不会扣成负数）
-8. **加新文案时记得两个包都加** —— 跑一遍上面的 key 对齐脚本，393 : 393 才是干净的
+8. **加新文案时记得两个包都加** —— 跑一遍 `npm run check`，全绿才是干净的
 
 ---
 

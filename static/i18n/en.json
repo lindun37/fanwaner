@@ -377,14 +377,14 @@
     "copied": "Link copied."
   },
   "error404": {
-    "title": "Nothing here",
+    "title": "Nothing here — Fanwaner",
     "heading": "🍔 Nope, nothing here",
     "sub": "This request was removed, or the link was mistyped.",
     "cta": "Browse other requests",
     "foot": "Don't worry — there's still food out there."
   },
   "admin": {
-    "title": "Admin",
+    "title": "Admin — Fanwaner",
     "brandSuffix": "Admin",
     "brandSub": "Who's been sending food over today?",
     "backToSite": "👀 Back to site",

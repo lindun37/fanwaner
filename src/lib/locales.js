@@ -57,6 +57,30 @@ const zh = {
     createFailed: "饭碗儿没摆稳，再整一哈嘛。",
     qrInvalid: "收款码图片没传对头。",
     editNotAllowed: "这个饭碗儿已经收摊了，改不得喽。",
+    // ---- 以下为多币种 / 海外渠道补充 ----
+    badTrc20: "USDT(TRC20) 地址不对，T 开头 34 位。",
+    badEth: "ETH 地址不对，0x 开头 42 位。",
+    badDeadline: "截止时间没填对头。",
+    badAvatar: "头像没传对头。",
+    badStripe: "Stripe 收款链接不对，要 https:// 开头的。",
+    badKofi: "Ko-fi 链接不对，形如 https://ko-fi.com/你的用户名。",
+    badBmc: "Buy Me a Coffee 链接不对，形如 https://buymeacoffee.com/你的用户名。",
+    badWise: "Wise 收款信息不对，填邮箱或者 wise.com 链接。",
+    badRevolut: "Revolut 链接不对，形如 https://revolut.me/你的用户名。",
+    badNtfy: "ntfy 主题名不对，只能用字母、数字、下划线、短横杠。",
+    badPushover: "Pushover 的 User Key / API Token 不对，各是 30 位字母数字。",
+    badWebhook: "Webhook 地址不对，要 https:// 开头的完整地址。",
+    currencyLocked: "已经有人投过了，币种就改不了喽 —— 不然账就对不上了。",
+    badUploadKind: "图片类型没传对头。",
+    uploadEmpty: "图片没传起来。",
+    uploadRateLimited: "传得有点多了，歇一哈嘛。",
+    uploadFormat: "图片格式没对头，现在只收 webp（前端传图会自动转成 webp，再选一张试试）。",
+  },
+
+  // ---- 投喂人展示名（api 返回里用来替换匿名昵称）----
+  feed: {
+    anonymous: "匿名耿直人",
+    passerby: "路过滴耿直人",
   },
 
   // ---- 通知正文 ----
@@ -74,19 +98,35 @@ const zh = {
     pendingNote: "（还没上墙，等你放行）",
   },
 
-  // ---- OG 分享图 ----
+  // ---- OG 分享图 / 分享 meta ----
   og: {
     brand: "饭碗儿",
     fallbackTitle: "今天想吃口饭",
-    statusDone: "吃饱喽！收碗！",
+    // 网页 <title> / og:title
+    pageTitle: (nick, title) => `${nick}的饭碗儿｜${title}`,
+    bowlMetaDesc: (nick) => `${nick}摆的饭碗儿，哪个来投喂一口`,
+    siteTitle: "饭碗儿 —— 没得饭吃啷个办？先把饭碗儿摆出来嘛。",
+    siteDesc: "互联网人的在线饭碗儿。摆个饭碗儿，等个耿直人投一口。",
+    ogDesc: (nick, state, amount, pct) =>
+      `${nick}摆的饭碗儿，哪个来投喂一口 · ${state}（${amount}，${pct}%）`,
+    // 状态与进度文案
     statusOpen: "还在讨生活",
+    statusDone: "吃饱喽！收碗！",
+    statusExpired: "这口饭已经凉了。",
+    statusHidden: "这口饭收起来了。",
     state0: "还没吃上一口",
     state30: "开始有饭了",
     state60: "饭有着落了",
     state90: "差最后一口",
     state100: "吃饱喽！",
-    metaDesc: (nick, state, cur, goal, pct) =>
-      `${nick}摆的饭碗儿，哪个来投喂一口 · ${state}（${cur} / ${goal}，${pct}%）`,
+    // 取词助手：把百分比 / 状态翻成对应文案，避免各处重复写三元表达式
+    stateOf: (p) =>
+      p >= 100 ? "吃饱喽！" : p >= 90 ? "差最后一口" : p >= 60 ? "饭有着落了" : p > 0 ? "开始有饭了" : "还没吃上一口",
+    statusOf: (status) =>
+      status === "completed" ? "吃饱喽！收碗！"
+        : status === "expired" ? "这口饭已经凉了。"
+        : status === "hidden" ? "这口饭收起来了。"
+        : "还在讨生活",
   },
 };
 
@@ -139,6 +179,30 @@ const en = {
     createFailed: "Couldn't post your request. Try again.",
     qrInvalid: "That QR image URL is invalid.",
     editNotAllowed: "This request is closed — it can't be edited.",
+    // ---- added with multi-currency / overseas channels ----
+    badTrc20: "Invalid USDT (TRC20) address — should start with T and be 34 characters.",
+    badEth: "Invalid ETH address — should start with 0x and be 42 characters.",
+    badDeadline: "That deadline doesn't look right.",
+    badAvatar: "That avatar image URL is invalid.",
+    badStripe: "Invalid Stripe link — it must start with https://.",
+    badKofi: "Invalid Ko-fi link — should look like https://ko-fi.com/yourname.",
+    badBmc: "Invalid Buy Me a Coffee link — should look like https://buymeacoffee.com/yourname.",
+    badWise: "Invalid Wise details — use an email or a wise.com link.",
+    badRevolut: "Invalid Revolut link — should look like https://revolut.me/yourname.",
+    badNtfy: "Invalid ntfy topic — letters, digits, underscores and hyphens only.",
+    badPushover: "Invalid Pushover user key / API token — each is 30 alphanumeric characters.",
+    badWebhook: "Invalid webhook URL — it must be a full https:// address.",
+    currencyLocked: "People have already chipped in, so the currency is locked — changing it would break the math.",
+    badUploadKind: "Unknown image kind.",
+    uploadEmpty: "No image was uploaded.",
+    uploadRateLimited: "That's a lot of uploads — take a short break.",
+    uploadFormat: "Wrong image format. Only webp is accepted (the page converts your image automatically — try picking it again).",
+  },
+
+  // ---- display name for contributors (replaces the nickname when anonymous) ----
+  feed: {
+    anonymous: "an anonymous supporter",
+    passerby: "a passer-by",
   },
 
   notify: {
@@ -155,18 +219,32 @@ const en = {
     pendingNote: "(Not live yet — waiting on your approval.)",
   },
 
+  // ---- OG share image / share meta ----
   og: {
     brand: "Fanwaner",
     fallbackTitle: "Just trying to get a meal",
-    statusDone: "Fully fed — bowl closed!",
+    pageTitle: (nick, title) => `${nick}'s meal · ${title}`,
+    bowlMetaDesc: (nick) => `${nick} put out a meal — chip in if you can`,
+    siteTitle: "Fanwaner — Broke? Put out a meal and let someone feed you.",
+    siteDesc: "An open-source meal jar for people on the internet. Ask for a meal, wait for someone kind to chip in.",
+    ogDesc: (nick, state, amount, pct) =>
+      `${nick} put out a meal — chip in if you can · ${state} (${amount}, ${pct}%)`,
     statusOpen: "Still hungry",
+    statusDone: "Fully funded — closed!",
+    statusExpired: "This one expired.",
+    statusHidden: "This one was taken down.",
     state0: "Nothing yet",
     state30: "Getting there",
     state60: "More than halfway",
     state90: "Almost full",
     state100: "Full!",
-    metaDesc: (nick, state, cur, goal, pct) =>
-      `${nick} put out a bowl — chip in if you can · ${state} (${cur} / ${goal}, ${pct}%)`,
+    stateOf: (p) =>
+      p >= 100 ? "Full!" : p >= 90 ? "Almost full" : p >= 60 ? "More than halfway" : p > 0 ? "Getting there" : "Nothing yet",
+    statusOf: (status) =>
+      status === "completed" ? "Fully funded — closed!"
+        : status === "expired" ? "This one expired."
+        : status === "hidden" ? "This one was taken down."
+        : "Still hungry",
   },
 };
 

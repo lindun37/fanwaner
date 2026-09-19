@@ -2,6 +2,7 @@
 // 免放行模式下：投喂直接 approved 并已计账，后台的「拒了」需要把金额扣回去。
 import { ok, fail, ERR, readJson } from "../lib/resp.js";
 import { detectLocale, t } from "../lib/i18n.js";
+import { toMajor } from "../lib/currency.js";
 
 function auth(request, env) {
   const header = request.headers.get("Authorization") || "";
@@ -9,14 +10,16 @@ function auth(request, env) {
 }
 
 function fmtDonation(r) {
+  const currency = r.currency || "CNY";
   return {
     id: r.id,
     slug: r.slug,
     bowlTitle: r.bowl_title,
     nickname: r.nickname || "anonymous",
     amountMinor: r.amount_cents,
-    currency: r.currency || "CNY",
-    amountYuan: r.amount_cents / 100, // 兼容旧前端
+    currency,
+    // 兼容旧前端：注意只能按币种换算，JPY/KRW 没有小数位，不能写死 /100
+    amountYuan: toMajor(r.amount_cents, currency),
     message: r.message,
     paymentMethod: r.payment_method,
     txid: r.txid,
@@ -57,16 +60,18 @@ export async function getBowlForAdmin(request, env, slug) {
   const cnt = await env.DB.prepare(
     "SELECT COUNT(*) AS c FROM donations WHERE bowl_id=? AND status='approved'"
   ).bind(row.id).first();
+  const cur = row.currency || "CNY";
   return ok({
     id: row.id,
     slug: row.slug,
     title: row.title,
     status: row.status,
-    currency: row.currency || "CNY",
+    currency: cur,
     currentMinor: row.current_cents,
     targetMinor: row.target_cents,
-    currentYuan: row.current_cents / 100, // 兼容旧前端
-    targetYuan: row.target_cents / 100,
+    // 兼容旧前端：按币种换算（JPY/KRW 无小数位）
+    currentYuan: toMajor(row.current_cents, cur),
+    targetYuan: toMajor(row.target_cents, cur),
     approvedDonations: cnt?.c || 0,
   });
 }

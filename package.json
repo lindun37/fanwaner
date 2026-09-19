@@ -2,11 +2,12 @@
   "name": "fanwaner",
   "version": "1.0.0",
   "private": true,
-  "description": "没得饭吃啷个办？先把饭碗儿摆出来嘛。一个有点重庆味的开源在线饭碗儿。",
+  "description": "Broke? Put out a meal and let a stranger buy it for you. An open-source, zero-build meal jar on Cloudflare Workers.",
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
+    "check": "node scripts/check-i18n.mjs",
     "db:local": "wrangler d1 migrations apply fanwaner --local",
     "db:remote": "wrangler d1 migrations apply fanwaner --remote",
     "font:download": "node scripts/download-font.mjs",

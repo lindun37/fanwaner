@@ -5,11 +5,25 @@ import {
   yuanToCents,
   isLocalImageUrl,
   isValidSlug,
+  isValidTrc20Address,
   isValidBep20Address,
+  isValidEthAddress,
+  isValidBtcAddress,
+  isValidSolAddress,
   isValidPayPalLink,
+  isValidStripeUrl,
+  isValidKofiUrl,
+  isValidBmcUrl,
+  isValidWiseRecipient,
+  isValidRevolutUrl,
   isValidWecomWebhook,
   isValidTelegramChatId,
   isValidServerChanKey,
+  isValidDiscordWebhook,
+  isValidSlackWebhook,
+  isValidNtfyTopic,
+  isValidPushoverKey,
+  isValidGenericWebhook,
   isValidEmail,
   isValidEmailApiUrl,
   isValidEmailApiKey,
@@ -22,14 +36,19 @@ import { getIp, computeDailyKey } from "../lib/ip.js";
 import { randomSlug, randomToken } from "../lib/slug.js";
 import { getBowlBySlug, formatBowl, formatDonation, isUniqueConflict } from "../lib/db.js";
 import { detectLocale, t } from "../lib/i18n.js";
-import { normalizeCurrency, CURRENCY_CODES, DEFAULT_CURRENCY } from "../lib/currency.js";
+import { SUPPORTED_LOCALES } from "../lib/locales.js";
+import { normalizeCurrency, CURRENCY_CODES, DEFAULT_CURRENCY, MAX_MINOR } from "../lib/currency.js";
 import { PAYMENT_METHODS } from "../lib/validate.js";
 import { autoApprove as autoApproveMode } from "./donations.js";
 
 export async function handleConfig(env) {
+  // 单笔金额上限（按「所选币种的主单位」理解：USD 就是 1000 美元、JPY 就是 1000 日元）
+  const maxAmount = Number(env.MAX_AMOUNT_YUAN) || LIMITS.amountMaxYuan;
   return ok({
     turnstileSiteKey: env.TURNSTILE_SITE_KEY || "",
-    maxAmountYuan: env.MAX_AMOUNT_YUAN || LIMITS.amountMaxYuan,
+    maxAmount,
+    maxAmountYuan: maxAmount, // 兼容旧前端字段名
+    amountMaxMinor: MAX_MINOR, // 库里 CHECK 的硬上限（最小单位）
     // i18n：给前端填充币种下拉与支付方式
     defaultLocale: env.DEFAULT_LOCALE || "en",
     defaultCurrency: env.DEFAULT_CURRENCY || DEFAULT_CURRENCY,
@@ -147,20 +166,27 @@ export async function listBowls(request, env) {
 
 // POST /api/bowl 创建饭碗儿
 export async function createBowl(request, env) {
+  const locale = detectLocale(request, env);
   const ip = getIp(request);
   const body = await readJson(request);
-  if (!body) return fail(ERR.VALIDATION_ERROR, "数据没传对头，再整一哈嘛。");
+  if (!body) return fail(ERR.VALIDATION_ERROR, t(locale, "err.badJson"));
 
   // 1. Turnstile 服务端验证
   const tsOk = await verifyTurnstile(body.turnstileToken, env.TURNSTILE_SECRET_KEY, ip);
-  if (!tsOk) return fail(ERR.TURNSTILE_FAILED, "先证明你不是机器人嘛。", 403);
+  if (!tsOk) return fail(ERR.TURNSTILE_FAILED, t(locale, "err.turnstileFailed"), 403);
 
   // 2. 字段校验
   const title = clean(body.title, LIMITS.titleMax);
   const want = clean(body.want, LIMITS.wantMax);
   const reason = clean(body.reason, LIMITS.reasonMax);
   const nickname = clean(body.nickname, LIMITS.nicknameMax);
-  const targetCents = yuanToCents(body.targetAmount);
+
+  // 币种：请求里带的 > 部署默认 > 内置默认（USD）
+  const currency = normalizeCurrency(body.currency || env.DEFAULT_CURRENCY || DEFAULT_CURRENCY);
+  // 摆碗时用的界面语言，存下来给「通知正文」和「OG 分享图」复用
+  const language = SUPPORTED_LOCALES.includes(body.language) ? body.language : locale;
+  // 金额按所选币种换算（JPY/KRW 没有小数位，必须走 currency.js，不能写死 ×100）
+  const targetCents = yuanToCents(body.targetAmount, currency);
 
   // 自定义后缀（可选）：留空就随机整个 8 位的
   const slugOpt =
@@ -168,65 +194,119 @@ export async function createBowl(request, env) {
       ? String(body.slug).trim().toLowerCase()
       : "";
   if (slugOpt && !isValidSlug(slugOpt)) {
-    return fail(ERR.VALIDATION_ERROR, "后缀只准用英文小写字母、数字和短横杠（-），3 到 20 位，不能以横杠开头结尾哈。");
+    return fail(ERR.VALIDATION_ERROR, t(locale, "err.badSlug"));
   }
   if (slugOpt && RESERVED_SLUGS.has(slugOpt)) {
-    return fail(ERR.VALIDATION_ERROR, "这个后缀遭系统留到起在，换个嘛。");
+    return fail(ERR.VALIDATION_ERROR, t(locale, "err.slugReserved"));
   }
 
-  if (!title) return fail(ERR.VALIDATION_ERROR, "饭碗儿总得喊个啥子嘛。");
-  if (!reason) return fail(ERR.VALIDATION_ERROR, "为啥子要吃，总要说两句嘛。");
-  if (!nickname) return fail(ERR.VALIDATION_ERROR, "叫啥子嘛，总得留个名字。");
-  if (targetCents === null) return fail(ERR.VALIDATION_ERROR, "你这个金额有点不对头哈。");
+  if (!title) return fail(ERR.VALIDATION_ERROR, t(locale, "err.titleRequired"));
+  if (!reason) return fail(ERR.VALIDATION_ERROR, t(locale, "err.reasonRequired"));
+  if (!nickname) return fail(ERR.VALIDATION_ERROR, t(locale, "err.nicknameRequired"));
+  if (targetCents === null) return fail(ERR.VALIDATION_ERROR, t(locale, "err.badAmount"));
 
-  // 收款方式：三种都可选可不选，图也不是必须的，莫得收款方式一样能摆
+  // 收款方式全是可选的：一个都不填照样能摆碗
+  // —— 二维码图（一律只收本站 /i/ 开头的相对路径）
   if (body.wechatQr && !isLocalImageUrl(body.wechatQr)) {
-    return fail(ERR.VALIDATION_ERROR, "微信收款码图片没传对头。");
+    return fail(ERR.VALIDATION_ERROR, t(locale, "err.qrInvalid"));
   }
   if (body.alipayQr && !isLocalImageUrl(body.alipayQr)) {
-    return fail(ERR.VALIDATION_ERROR, "支付宝收款码图片没传对头。");
+    return fail(ERR.VALIDATION_ERROR, t(locale, "err.qrInvalid"));
   }
   if (body.usdtQr && !isLocalImageUrl(body.usdtQr)) {
-    return fail(ERR.VALIDATION_ERROR, "USDT 收款图没传对头。");
-  }
-  if (body.usdtAddress && (typeof body.usdtAddress !== "string" || body.usdtAddress.trim().length > 64)) {
-    return fail(ERR.VALIDATION_ERROR, "USDT 地址没填对头，看清楚再填。");
-  }
-  if (body.usdtBep20Address && !isValidBep20Address(body.usdtBep20Address)) {
-    return fail(ERR.VALIDATION_ERROR, "USDT BEP20 地址没填对头，0x 开头 42 位，看清楚哈。");
+    return fail(ERR.VALIDATION_ERROR, t(locale, "err.qrInvalid"));
   }
   if (body.usdtBep20Qr && !isLocalImageUrl(body.usdtBep20Qr)) {
-    return fail(ERR.VALIDATION_ERROR, "USDT BEP20 收款图没传对头。");
+    return fail(ERR.VALIDATION_ERROR, t(locale, "err.qrInvalid"));
   }
-  if (body.paypalLink && !isValidPayPalLink(body.paypalLink)) {
-    return fail(ERR.VALIDATION_ERROR, "PayPal 收款链接或邮箱没填对头，paypal.me 链接或者邮箱都行。");
+  if (body.usdtErc20Qr && !isLocalImageUrl(body.usdtErc20Qr)) {
+    return fail(ERR.VALIDATION_ERROR, t(locale, "err.qrInvalid"));
+  }
+  if (body.btcQr && !isLocalImageUrl(body.btcQr)) {
+    return fail(ERR.VALIDATION_ERROR, t(locale, "err.qrInvalid"));
   }
   if (body.paypalQr && !isLocalImageUrl(body.paypalQr)) {
-    return fail(ERR.VALIDATION_ERROR, "PayPal 收款图没传对头。");
+    return fail(ERR.VALIDATION_ERROR, t(locale, "err.qrInvalid"));
+  }
+  // —— 链上地址
+  if (body.usdtAddress && !isValidTrc20Address(body.usdtAddress)) {
+    return fail(ERR.VALIDATION_ERROR, t(locale, "err.badTrc20"));
+  }
+  if (body.usdtBep20Address && !isValidBep20Address(body.usdtBep20Address)) {
+    return fail(ERR.VALIDATION_ERROR, t(locale, "err.badBep20"));
+  }
+  if (body.usdtErc20Address && !isValidBep20Address(body.usdtErc20Address)) {
+    return fail(ERR.VALIDATION_ERROR, t(locale, "err.badErc20"));
+  }
+  if (body.ethAddress && !isValidEthAddress(body.ethAddress)) {
+    return fail(ERR.VALIDATION_ERROR, t(locale, "err.badEth"));
+  }
+  if (body.btcAddress && !isValidBtcAddress(body.btcAddress)) {
+    return fail(ERR.VALIDATION_ERROR, t(locale, "err.badBtc"));
+  }
+  if (body.solAddress && !isValidSolAddress(body.solAddress)) {
+    return fail(ERR.VALIDATION_ERROR, t(locale, "err.badSol"));
+  }
+  // —— 海外托管收款链接
+  if (body.paypalLink && !isValidPayPalLink(body.paypalLink)) {
+    return fail(ERR.VALIDATION_ERROR, t(locale, "err.badPaypal"));
+  }
+  if (body.stripeUrl && !isValidStripeUrl(body.stripeUrl)) {
+    return fail(ERR.VALIDATION_ERROR, t(locale, "err.badStripe"));
+  }
+  if (body.kofiUrl && !isValidKofiUrl(body.kofiUrl)) {
+    return fail(ERR.VALIDATION_ERROR, t(locale, "err.badKofi"));
+  }
+  if (body.bmcUrl && !isValidBmcUrl(body.bmcUrl)) {
+    return fail(ERR.VALIDATION_ERROR, t(locale, "err.badBmc"));
+  }
+  if (body.wiseEmail && !isValidWiseRecipient(body.wiseEmail)) {
+    return fail(ERR.VALIDATION_ERROR, t(locale, "err.badWise"));
+  }
+  if (body.revolutUrl && !isValidRevolutUrl(body.revolutUrl)) {
+    return fail(ERR.VALIDATION_ERROR, t(locale, "err.badRevolut"));
   }
 
-  // 留言通知：四条路随便填哪条都行，莫填错格式了
+  // 留言通知：填哪条都行，一个都不填就不推
   if (body.notifyWecom && !isValidWecomWebhook(body.notifyWecom)) {
-    return fail(ERR.VALIDATION_ERROR, "企业微信机器人地址没填对头，要那种 https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key= 开头的。");
+    return fail(ERR.VALIDATION_ERROR, t(locale, "err.badWecom"));
   }
   if (body.notifyTelegram && !isValidTelegramChatId(body.notifyTelegram)) {
-    return fail(ERR.VALIDATION_ERROR, "Telegram 的 chat_id 没填对头，数字才能用，比如 123456789。");
+    return fail(ERR.VALIDATION_ERROR, t(locale, "err.badTelegram"));
   }
   if (body.notifyServerchan && !isValidServerChanKey(body.notifyServerchan)) {
-    return fail(ERR.VALIDATION_ERROR, "Server酱的 SendKey 没填对头，SCT 或 SCU 开头的那个。");
+    return fail(ERR.VALIDATION_ERROR, t(locale, "err.badServerchan"));
+  }
+  if (body.notifyDiscord && !isValidDiscordWebhook(body.notifyDiscord)) {
+    return fail(ERR.VALIDATION_ERROR, t(locale, "err.badDiscord"));
+  }
+  if (body.notifySlack && !isValidSlackWebhook(body.notifySlack)) {
+    return fail(ERR.VALIDATION_ERROR, t(locale, "err.badSlack"));
+  }
+  if (body.notifyNtfy && !isValidNtfyTopic(body.notifyNtfy)) {
+    return fail(ERR.VALIDATION_ERROR, t(locale, "err.badNtfy"));
+  }
+  if (body.notifyPushoverUser && !isValidPushoverKey(body.notifyPushoverUser)) {
+    return fail(ERR.VALIDATION_ERROR, t(locale, "err.badPushover"));
+  }
+  if (body.notifyPushoverToken && !isValidPushoverKey(body.notifyPushoverToken)) {
+    return fail(ERR.VALIDATION_ERROR, t(locale, "err.badPushover"));
+  }
+  if (body.notifyWebhook && !isValidGenericWebhook(body.notifyWebhook)) {
+    return fail(ERR.VALIDATION_ERROR, t(locale, "err.badWebhook"));
   }
   if (body.notifyEmail && !isValidEmail(body.notifyEmail)) {
-    return fail(ERR.VALIDATION_ERROR, "邮箱没填对头，看清楚格式嘛。");
+    return fail(ERR.VALIDATION_ERROR, t(locale, "err.badEmail"));
   }
   // 邮件走碗主人自己配的 HTTP 邮件 API：地址 + Key 是必配套，发件人可选
   if (body.emailApiUrl && !isValidEmailApiUrl(body.emailApiUrl)) {
-    return fail(ERR.VALIDATION_ERROR, "邮件 API 地址没填对头，要 https:// 开头的。");
+    return fail(ERR.VALIDATION_ERROR, t(locale, "err.badEmailApiUrl"));
   }
   if (body.emailApiKey && !isValidEmailApiKey(body.emailApiKey)) {
-    return fail(ERR.VALIDATION_ERROR, "邮件 API Key 没填对头，re_ 开头的那种。");
+    return fail(ERR.VALIDATION_ERROR, t(locale, "err.badEmailApiKey"));
   }
   if (body.emailFrom && !isValidEmailFrom(body.emailFrom)) {
-    return fail(ERR.VALIDATION_ERROR, "发件人没填对头，填个邮箱或者「别名 <邮箱>」嘛。");
+    return fail(ERR.VALIDATION_ERROR, t(locale, "err.badEmailFrom"));
   }
 
   const avatarUrl = body.avatarUrl && isLocalImageUrl(body.avatarUrl) ? body.avatarUrl : "";
@@ -234,7 +314,7 @@ export async function createBowl(request, env) {
   if (body.deadline) {
     const d = new Date(body.deadline);
     if (Number.isNaN(d.getTime())) {
-      return fail(ERR.VALIDATION_ERROR, "截止时间没填对头。");
+      return fail(ERR.VALIDATION_ERROR, t(locale, "err.badDeadline"));
     }
     deadline = d.toISOString();
   }
@@ -251,12 +331,16 @@ export async function createBowl(request, env) {
     limitInserted = r.success;
   } catch (err) {
     if (isUniqueConflict(err)) {
-      return fail(ERR.RATE_LIMITED, "你今天已经摆过饭碗儿了哈。一个饭碗儿一天摆一次，莫一天到黑摆起耍。", 429);
+      return fail(ERR.RATE_LIMITED, t(locale, "err.dailyLimit"), 429);
     }
-    return fail(ERR.SERVER_ERROR, "饭碗儿没摆稳，再整一哈嘛。", 500);
+    return fail(ERR.SERVER_ERROR, t(locale, "err.createFailed"), 500);
   }
 
   // 4. 创建用户 + 饭碗儿（slug 冲突重试）
+  // 文本字段统一 trim；链上地址再统一转小写（TRC20 是大小写敏感的 base58，保留原样）
+  const tx = (v) => (typeof v === "string" ? v.trim() : "");
+  const lower = (v) => tx(v).toLowerCase();
+
   const editToken = randomToken();
   try {
     const userRes = await env.DB.prepare(
@@ -271,13 +355,20 @@ export async function createBowl(request, env) {
       try {
         await env.DB.prepare(
           `INSERT INTO bowls
-             (slug, user_id, title, want, reason, target_cents, deadline,
-              wechat_qr, alipay_qr, usdt_address, usdt_qr, usdt_bep20_address, usdt_bep20_qr,
+             (slug, user_id, title, want, reason, currency, language, target_cents, deadline,
+              wechat_qr, alipay_qr,
+              usdt_address, usdt_qr, usdt_bep20_address, usdt_bep20_qr,
+              usdt_erc20_address, usdt_erc20_qr, btc_address, btc_qr, eth_address, sol_address,
+              stripe_url, kofi_url, bmc_url, wise_email, revolut_url,
               paypal_link, paypal_qr,
               notify_wecom, notify_telegram, notify_serverchan, notify_email,
+              notify_discord, notify_slack, notify_ntfy,
+              notify_pushover_user, notify_pushover_token, notify_webhook_url,
               email_api_url, email_api_key, email_from,
               nickname, avatar_url, status, edit_token)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?)`
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                   ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                   ?, ?, ?, ?, ?, ?, 'active', ?)`
         )
           .bind(
             slug,
@@ -285,29 +376,48 @@ export async function createBowl(request, env) {
             title,
             want,
             reason,
+            currency,
+            language,
             targetCents,
             deadline,
-            body.wechatQr || "",
-            body.alipayQr || "",
-            body.usdtAddress ? body.usdtAddress.trim() : "",
-            body.usdtQr || "",
-            body.usdtBep20Address ? body.usdtBep20Address.trim().toLowerCase() : "",
-            body.usdtBep20Qr || "",
-            body.paypalLink ? body.paypalLink.trim() : "",
-            body.paypalQr || "",
-            body.notifyWecom ? body.notifyWecom.trim() : "",
-            body.notifyTelegram ? body.notifyTelegram.trim() : "",
-            body.notifyServerchan ? body.notifyServerchan.trim() : "",
-            body.notifyEmail ? body.notifyEmail.trim() : "",
-            body.emailApiUrl ? body.emailApiUrl.trim() : "",
-            body.emailApiKey ? body.emailApiKey.trim() : "",
-            body.emailFrom ? body.emailFrom.trim() : "",
+            tx(body.wechatQr),
+            tx(body.alipayQr),
+            tx(body.usdtAddress),
+            tx(body.usdtQr),
+            lower(body.usdtBep20Address),
+            tx(body.usdtBep20Qr),
+            lower(body.usdtErc20Address),
+            tx(body.usdtErc20Qr),
+            tx(body.btcAddress),
+            tx(body.btcQr),
+            lower(body.ethAddress),
+            tx(body.solAddress),
+            tx(body.stripeUrl),
+            tx(body.kofiUrl),
+            tx(body.bmcUrl),
+            tx(body.wiseEmail),
+            tx(body.revolutUrl),
+            tx(body.paypalLink),
+            tx(body.paypalQr),
+            tx(body.notifyWecom),
+            tx(body.notifyTelegram),
+            tx(body.notifyServerchan),
+            tx(body.notifyEmail),
+            tx(body.notifyDiscord),
+            tx(body.notifySlack),
+            tx(body.notifyNtfy),
+            tx(body.notifyPushoverUser),
+            tx(body.notifyPushoverToken),
+            tx(body.notifyWebhook),
+            tx(body.emailApiUrl),
+            tx(body.emailApiKey),
+            tx(body.emailFrom),
             nickname,
             avatarUrl,
             editToken
           )
           .run();
-        return ok({ slug, editToken }, 201);
+        return ok({ slug, editToken, currency, language }, 201);
       } catch (err) {
         if (!isUniqueConflict(err)) throw err;
         if (slugOpt) {
@@ -315,7 +425,7 @@ export async function createBowl(request, env) {
           await env.DB.prepare("DELETE FROM daily_bowl_limits WHERE daily_key = ? AND date = ?")
             .bind(dailyKey, date)
             .run();
-          return fail(ERR.CONFLICT, "这个后缀已经遭别个占起了，换一个嘛。", 409);
+          return fail(ERR.CONFLICT, t(locale, "err.slugTaken"), 409);
         }
         // 随机 slug 撞了，换个再试
       }
@@ -326,7 +436,7 @@ export async function createBowl(request, env) {
     await env.DB.prepare("DELETE FROM daily_bowl_limits WHERE daily_key = ? AND date = ?")
       .bind(dailyKey, date)
       .run();
-    return fail(ERR.SERVER_ERROR, "饭碗儿没摆稳，再整一哈嘛。", 500);
+    return fail(ERR.SERVER_ERROR, t(locale, "err.createFailed"), 500);
   }
 }
 
@@ -366,93 +476,174 @@ export async function getBowl(request, env, slug) {
   });
 }
 
-// PUT /api/bowl/:slug（编辑：标题/想吃啥/为啥/金额/截止时间/收款方式/昵称）
+// PUT /api/bowl/:slug（编辑：标题/想吃啥/为啥/金额/币种/截止时间/收款方式/通知渠道/昵称）
 export async function updateBowl(request, env, slug) {
-  if (!isValidSlug(slug)) return fail(ERR.NOT_FOUND, "这口饭好像没摆在这儿。", 404);
+  const locale = detectLocale(request, env);
+  if (!isValidSlug(slug)) return fail(ERR.NOT_FOUND, t(locale, "err.bowlNotFound"), 404);
   const bowl = await getBowlBySlug(env.DB, slug);
-  if (!bowl) return fail(ERR.NOT_FOUND, "这口饭好像没摆在这儿。", 404);
+  if (!bowl) return fail(ERR.NOT_FOUND, t(locale, "err.bowlNotFound"), 404);
   if (bowl.status !== "active") {
-    return fail(ERR.CONFLICT, "这个饭碗儿已经收摊了，改不得喽。", 409);
+    return fail(ERR.CONFLICT, t(locale, "err.editNotAllowed"), 409);
   }
 
   const body = await readJson(request);
-  if (!body) return fail(ERR.VALIDATION_ERROR, "数据没传对头，再整一哈嘛。");
+  if (!body) return fail(ERR.VALIDATION_ERROR, t(locale, "err.badJson"));
   if (!body.editToken || body.editToken !== bowl.edit_token) {
-    return fail(ERR.UNAUTHORIZED, "这个饭碗儿不是你的哈。", 401);
+    return fail(ERR.UNAUTHORIZED, t(locale, "err.notYourBowl"), 401);
   }
 
   const title = clean(body.title, LIMITS.titleMax);
   const want = clean(body.want, LIMITS.wantMax);
   const reason = clean(body.reason, LIMITS.reasonMax);
   const nickname = clean(body.nickname, LIMITS.nicknameMax);
-  const targetCents = yuanToCents(body.targetAmount);
 
-  if (!title) return fail(ERR.VALIDATION_ERROR, "饭碗儿总得喊个啥子嘛。");
-  if (!reason) return fail(ERR.VALIDATION_ERROR, "为啥子要吃，总要说两句嘛。");
-  if (!nickname) return fail(ERR.VALIDATION_ERROR, "叫啥子嘛，总得留个名字。");
-  if (targetCents === null) return fail(ERR.VALIDATION_ERROR, "你这个金额有点不对头哈。");
-  if (targetCents < bowl.current_cents) {
-    return fail(ERR.VALIDATION_ERROR, "目标金额不能低于已经收到的。");
+  // 币种：一旦已经有人投过，就锁死不能换了 ——
+  // 库里的 current_cents / amount_cents 都是「该币种的最小单位」，
+  // 中途换币种会让已经收到的金额瞬间变成另一个数，是纯粹的账目错乱。
+  let currency = bowl.currency || DEFAULT_CURRENCY;
+  if (body.currency && normalizeCurrency(body.currency) !== currency) {
+    if (bowl.current_cents > 0) {
+      return fail(ERR.CONFLICT, t(locale, "err.currencyLocked"), 409);
+    }
+    currency = normalizeCurrency(body.currency);
   }
+  const language = SUPPORTED_LOCALES.includes(body.language) ? body.language : bowl.language || locale;
+  const targetCents = yuanToCents(body.targetAmount, currency);
+
+  if (!title) return fail(ERR.VALIDATION_ERROR, t(locale, "err.titleRequired"));
+  if (!reason) return fail(ERR.VALIDATION_ERROR, t(locale, "err.reasonRequired"));
+  if (!nickname) return fail(ERR.VALIDATION_ERROR, t(locale, "err.nicknameRequired"));
+  if (targetCents === null) return fail(ERR.VALIDATION_ERROR, t(locale, "err.badAmount"));
+  if (targetCents < bowl.current_cents) {
+    return fail(ERR.VALIDATION_ERROR, t(locale, "err.amountBelowRaised"));
+  }
+
+  // —— 二维码图
   if (body.wechatQr && !isLocalImageUrl(body.wechatQr)) {
-    return fail(ERR.VALIDATION_ERROR, "微信收款码图片没传对头。");
+    return fail(ERR.VALIDATION_ERROR, t(locale, "err.qrInvalid"));
   }
   if (body.alipayQr && !isLocalImageUrl(body.alipayQr)) {
-    return fail(ERR.VALIDATION_ERROR, "支付宝收款码图片没传对头。");
+    return fail(ERR.VALIDATION_ERROR, t(locale, "err.qrInvalid"));
   }
   if (body.usdtQr && !isLocalImageUrl(body.usdtQr)) {
-    return fail(ERR.VALIDATION_ERROR, "USDT 收款图没传对头。");
-  }
-  if (body.usdtBep20Address && !isValidBep20Address(body.usdtBep20Address)) {
-    return fail(ERR.VALIDATION_ERROR, "USDT BEP20 地址没填对头，0x 开头 42 位，看清楚哈。");
+    return fail(ERR.VALIDATION_ERROR, t(locale, "err.qrInvalid"));
   }
   if (body.usdtBep20Qr && !isLocalImageUrl(body.usdtBep20Qr)) {
-    return fail(ERR.VALIDATION_ERROR, "USDT BEP20 收款图没传对头。");
+    return fail(ERR.VALIDATION_ERROR, t(locale, "err.qrInvalid"));
   }
-  if (body.paypalLink && !isValidPayPalLink(body.paypalLink)) {
-    return fail(ERR.VALIDATION_ERROR, "PayPal 收款链接或邮箱没填对头，paypal.me 链接或者邮箱都行。");
+  if (body.usdtErc20Qr && !isLocalImageUrl(body.usdtErc20Qr)) {
+    return fail(ERR.VALIDATION_ERROR, t(locale, "err.qrInvalid"));
+  }
+  if (body.btcQr && !isLocalImageUrl(body.btcQr)) {
+    return fail(ERR.VALIDATION_ERROR, t(locale, "err.qrInvalid"));
   }
   if (body.paypalQr && !isLocalImageUrl(body.paypalQr)) {
-    return fail(ERR.VALIDATION_ERROR, "PayPal 收款图没传对头。");
+    return fail(ERR.VALIDATION_ERROR, t(locale, "err.qrInvalid"));
   }
+  // —— 链上地址（只在填了的时候校验；空着就保留原值）
+  if (body.usdtAddress && !isValidTrc20Address(body.usdtAddress)) {
+    return fail(ERR.VALIDATION_ERROR, t(locale, "err.badTrc20"));
+  }
+  if (body.usdtBep20Address && !isValidBep20Address(body.usdtBep20Address)) {
+    return fail(ERR.VALIDATION_ERROR, t(locale, "err.badBep20"));
+  }
+  if (body.usdtErc20Address && !isValidBep20Address(body.usdtErc20Address)) {
+    return fail(ERR.VALIDATION_ERROR, t(locale, "err.badErc20"));
+  }
+  if (body.ethAddress && !isValidEthAddress(body.ethAddress)) {
+    return fail(ERR.VALIDATION_ERROR, t(locale, "err.badEth"));
+  }
+  if (body.btcAddress && !isValidBtcAddress(body.btcAddress)) {
+    return fail(ERR.VALIDATION_ERROR, t(locale, "err.badBtc"));
+  }
+  if (body.solAddress && !isValidSolAddress(body.solAddress)) {
+    return fail(ERR.VALIDATION_ERROR, t(locale, "err.badSol"));
+  }
+  // —— 海外托管收款链接
+  if (body.paypalLink && !isValidPayPalLink(body.paypalLink)) {
+    return fail(ERR.VALIDATION_ERROR, t(locale, "err.badPaypal"));
+  }
+  if (body.stripeUrl && !isValidStripeUrl(body.stripeUrl)) {
+    return fail(ERR.VALIDATION_ERROR, t(locale, "err.badStripe"));
+  }
+  if (body.kofiUrl && !isValidKofiUrl(body.kofiUrl)) {
+    return fail(ERR.VALIDATION_ERROR, t(locale, "err.badKofi"));
+  }
+  if (body.bmcUrl && !isValidBmcUrl(body.bmcUrl)) {
+    return fail(ERR.VALIDATION_ERROR, t(locale, "err.badBmc"));
+  }
+  if (body.wiseEmail && !isValidWiseRecipient(body.wiseEmail)) {
+    return fail(ERR.VALIDATION_ERROR, t(locale, "err.badWise"));
+  }
+  if (body.revolutUrl && !isValidRevolutUrl(body.revolutUrl)) {
+    return fail(ERR.VALIDATION_ERROR, t(locale, "err.badRevolut"));
+  }
+  // —— 通知渠道
   if (body.notifyWecom && !isValidWecomWebhook(body.notifyWecom)) {
-    return fail(ERR.VALIDATION_ERROR, "企业微信机器人地址没填对头，要那种 https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key= 开头的。");
+    return fail(ERR.VALIDATION_ERROR, t(locale, "err.badWecom"));
   }
   if (body.notifyTelegram && !isValidTelegramChatId(body.notifyTelegram)) {
-    return fail(ERR.VALIDATION_ERROR, "Telegram 的 chat_id 没填对头，数字才能用，比如 123456789。");
+    return fail(ERR.VALIDATION_ERROR, t(locale, "err.badTelegram"));
   }
   if (body.notifyServerchan && !isValidServerChanKey(body.notifyServerchan)) {
-    return fail(ERR.VALIDATION_ERROR, "Server酱的 SendKey 没填对头，SCT 或 SCU 开头的那个。");
+    return fail(ERR.VALIDATION_ERROR, t(locale, "err.badServerchan"));
+  }
+  if (body.notifyDiscord && !isValidDiscordWebhook(body.notifyDiscord)) {
+    return fail(ERR.VALIDATION_ERROR, t(locale, "err.badDiscord"));
+  }
+  if (body.notifySlack && !isValidSlackWebhook(body.notifySlack)) {
+    return fail(ERR.VALIDATION_ERROR, t(locale, "err.badSlack"));
+  }
+  if (body.notifyNtfy && !isValidNtfyTopic(body.notifyNtfy)) {
+    return fail(ERR.VALIDATION_ERROR, t(locale, "err.badNtfy"));
+  }
+  if (body.notifyPushoverUser && !isValidPushoverKey(body.notifyPushoverUser)) {
+    return fail(ERR.VALIDATION_ERROR, t(locale, "err.badPushover"));
+  }
+  if (body.notifyPushoverToken && !isValidPushoverKey(body.notifyPushoverToken)) {
+    return fail(ERR.VALIDATION_ERROR, t(locale, "err.badPushover"));
+  }
+  if (body.notifyWebhook && !isValidGenericWebhook(body.notifyWebhook)) {
+    return fail(ERR.VALIDATION_ERROR, t(locale, "err.badWebhook"));
   }
   if (body.notifyEmail && !isValidEmail(body.notifyEmail)) {
-    return fail(ERR.VALIDATION_ERROR, "邮箱没填对头，看清楚格式嘛。");
+    return fail(ERR.VALIDATION_ERROR, t(locale, "err.badEmail"));
   }
   // 邮件 API 三件套（碗主人自配）：地址 + Key 配套，发件人可选；Key 不填就保留原来的
   if (body.emailApiUrl && !isValidEmailApiUrl(body.emailApiUrl)) {
-    return fail(ERR.VALIDATION_ERROR, "邮件 API 地址没填对头，要 https:// 开头的。");
+    return fail(ERR.VALIDATION_ERROR, t(locale, "err.badEmailApiUrl"));
   }
   if (body.emailApiKey && !isValidEmailApiKey(body.emailApiKey)) {
-    return fail(ERR.VALIDATION_ERROR, "邮件 API Key 没填对头，re_ 开头的那种。");
+    return fail(ERR.VALIDATION_ERROR, t(locale, "err.badEmailApiKey"));
   }
   if (body.emailFrom && !isValidEmailFrom(body.emailFrom)) {
-    return fail(ERR.VALIDATION_ERROR, "发件人没填对头，填个邮箱或者「别名 <邮箱>」嘛。");
+    return fail(ERR.VALIDATION_ERROR, t(locale, "err.badEmailFrom"));
   }
   if (body.avatarUrl && !isLocalImageUrl(body.avatarUrl)) {
-    return fail(ERR.VALIDATION_ERROR, "头像没传对头。");
+    return fail(ERR.VALIDATION_ERROR, t(locale, "err.badAvatar"));
   }
 
   let deadline = bowl.deadline;
   if (body.deadline) {
     const d = new Date(body.deadline);
-    if (Number.isNaN(d.getTime())) return fail(ERR.VALIDATION_ERROR, "截止时间没填对头。");
+    if (Number.isNaN(d.getTime())) return fail(ERR.VALIDATION_ERROR, t(locale, "err.badDeadline"));
     deadline = d.toISOString();
   }
 
+  // 空值一律回落到库里原值（前端传 undefined 表示「这一项没动」）
+  const tx = (v, fallback) => (typeof v === "string" && v.trim() ? v.trim() : fallback);
+  const lower = (v, fallback) => (typeof v === "string" && v.trim() ? v.trim().toLowerCase() : fallback);
+
   await env.DB.prepare(
-    `UPDATE bowls SET title=?, want=?, reason=?, target_cents=?, deadline=?,
-       wechat_qr=?, alipay_qr=?, usdt_address=?, usdt_qr=?, usdt_bep20_address=?, usdt_bep20_qr=?,
+    `UPDATE bowls SET title=?, want=?, reason=?, currency=?, language=?, target_cents=?, deadline=?,
+       wechat_qr=?, alipay_qr=?,
+       usdt_address=?, usdt_qr=?, usdt_bep20_address=?, usdt_bep20_qr=?,
+       usdt_erc20_address=?, usdt_erc20_qr=?, btc_address=?, btc_qr=?, eth_address=?, sol_address=?,
+       stripe_url=?, kofi_url=?, bmc_url=?, wise_email=?, revolut_url=?,
        paypal_link=?, paypal_qr=?,
        notify_wecom=?, notify_telegram=?, notify_serverchan=?, notify_email=?,
+       notify_discord=?, notify_slack=?, notify_ntfy=?,
+       notify_pushover_user=?, notify_pushover_token=?, notify_webhook_url=?,
        email_api_url=?, email_api_key=?, email_from=?,
        nickname=?, avatar_url=?, updated_at=datetime('now')
      WHERE id=?`
@@ -461,30 +652,49 @@ export async function updateBowl(request, env, slug) {
       title,
       want,
       reason,
+      currency,
+      language,
       targetCents,
       deadline,
       body.wechatQr || bowl.wechat_qr,
       body.alipayQr || bowl.alipay_qr,
-      body.usdtAddress ? body.usdtAddress.trim() : bowl.usdt_address,
+      tx(body.usdtAddress, bowl.usdt_address),
       body.usdtQr || bowl.usdt_qr,
-      body.usdtBep20Address ? body.usdtBep20Address.trim().toLowerCase() : bowl.usdt_bep20_address,
+      lower(body.usdtBep20Address, bowl.usdt_bep20_address),
       body.usdtBep20Qr || bowl.usdt_bep20_qr,
-      body.paypalLink ? body.paypalLink.trim() : bowl.paypal_link,
+      lower(body.usdtErc20Address, bowl.usdt_erc20_address),
+      body.usdtErc20Qr || bowl.usdt_erc20_qr,
+      tx(body.btcAddress, bowl.btc_address),
+      body.btcQr || bowl.btc_qr,
+      lower(body.ethAddress, bowl.eth_address),
+      tx(body.solAddress, bowl.sol_address),
+      tx(body.stripeUrl, bowl.stripe_url),
+      tx(body.kofiUrl, bowl.kofi_url),
+      tx(body.bmcUrl, bowl.bmc_url),
+      tx(body.wiseEmail, bowl.wise_email),
+      tx(body.revolutUrl, bowl.revolut_url),
+      tx(body.paypalLink, bowl.paypal_link),
       body.paypalQr || bowl.paypal_qr,
-      body.notifyWecom ? body.notifyWecom.trim() : bowl.notify_wecom,
-      body.notifyTelegram ? body.notifyTelegram.trim() : bowl.notify_telegram,
-      body.notifyServerchan ? body.notifyServerchan.trim() : bowl.notify_serverchan,
-      body.notifyEmail ? body.notifyEmail.trim() : bowl.notify_email,
-      body.emailApiUrl ? body.emailApiUrl.trim() : bowl.email_api_url,
-      body.emailApiKey ? body.emailApiKey.trim() : bowl.email_api_key,
-      body.emailFrom ? body.emailFrom.trim() : bowl.email_from,
+      tx(body.notifyWecom, bowl.notify_wecom),
+      tx(body.notifyTelegram, bowl.notify_telegram),
+      tx(body.notifyServerchan, bowl.notify_serverchan),
+      tx(body.notifyEmail, bowl.notify_email),
+      tx(body.notifyDiscord, bowl.notify_discord),
+      tx(body.notifySlack, bowl.notify_slack),
+      tx(body.notifyNtfy, bowl.notify_ntfy),
+      tx(body.notifyPushoverUser, bowl.notify_pushover_user),
+      tx(body.notifyPushoverToken, bowl.notify_pushover_token),
+      tx(body.notifyWebhook, bowl.notify_webhook_url),
+      tx(body.emailApiUrl, bowl.email_api_url),
+      tx(body.emailApiKey, bowl.email_api_key),
+      tx(body.emailFrom, bowl.email_from),
       nickname,
       body.avatarUrl || bowl.avatar_url,
       bowl.id
     )
     .run();
 
-  return ok({ slug });
+  return ok({ slug, currency, language });
 }
 
 // —— 摆碗的本人（edit_token）查看并放行自家饭碗的投喂 ——

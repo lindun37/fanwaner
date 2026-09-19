@@ -64,11 +64,20 @@ export function detectLocale(request, env) {
 }
 
 // 轻量取值：t(locale, "err.badAmount") / t(locale, "notify.title")
+// 只返回字符串；取不到返回 undefined，调用方用 `|| "兜底"` 处理。
 export function t(locale, path) {
   const value = path
     .split(".")
     .reduce((acc, k) => (acc == null ? undefined : acc[k]), localePack(locale));
   return typeof value === "string" ? value : undefined;
+}
+
+// 取「任意类型」的文案节点：函数型模板（OG 文案要拼变量）和数组走这个。
+// 用法：tp(locale, "og.pageTitle")(nick, title)
+export function tp(locale, path) {
+  return path
+    .split(".")
+    .reduce((acc, k) => (acc == null ? undefined : acc[k]), localePack(locale));
 }
 
 // 写回 cookie，让后续请求（含静态页首屏）记住用户选的语言

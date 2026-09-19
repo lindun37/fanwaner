@@ -26,11 +26,14 @@ bucket_name = "fanwaner-assets"
 
 [vars]
 TURNSTILE_SITE_KEY = "" # Turnstile 站点公开 sitekey
-MAX_AMOUNT_YUAN = 1000 # 兼容旧字段：CNY 场景下的金额上限（元）
+MAX_AMOUNT_YUAN = 1000 # 单笔金额上限（按所选币种的主单位算：USD→1000 美元、JPY→1000 日元）
 MAX_UPLOAD_BYTES = 2097152 # 图片上传大小上限（2MB）
-R2_FONT_KEY = "fonts/NotoSansSC-Regular.otf" # OG 图用的中文字体在 R2 的 key
+R2_FONT_KEY = "fonts/NotoSansSC-Regular.otf" # OG 图用的字体在 R2 的 key
 # 海外场景建议改用拉丁字体（体积小很多，约 300KB）：
 # R2_FONT_KEY = "fonts/NotoSans-Regular.ttf"
+# 字体名默认从 R2_FONT_KEY 推导（NotoSans-Regular.ttf → NotoSans），一般不用填；
+# 只有 key 与字体内部名对不上时才需要显式指定：
+# OG_FONT_NAME = "NotoSans"
 SITE_URL = "" # 站点域名（不带结尾斜杠），如 https://fanwaner.example.com，用于 OG 分享图链接
 
 # ---- i18n（新增）----

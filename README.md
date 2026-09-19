@@ -1,320 +1,341 @@
-# 🍚 饭碗儿
+# 🍔 Fanwaner
+
+> 🌏 **中文版：[README.zh-CN.md](README.zh-CN.md)**
+
 <p align="center">
-  <img src="static/img/pic.png" alt="饭碗儿首页" width="720" />
+  <img src="static/img/pic.png" alt="Fanwaner home page" width="720" />
 </p>
-> 没得饭吃啷个办？先把饭碗儿摆出来嘛。
 
-一个有点重庆味的开源在线饭碗儿。
+**Broke? Put out a meal and let a stranger buy it for you.**
 
-没得啥子复杂东西。
+An open-source "meal jar" for people on the internet.
 
-你可以：
+Nothing complicated. You can:
 
-- 摆个饭碗儿
-- 说哈自己想吃啥子
-- 留个收款方式
-- 把饭碗儿甩出去
-- 等哪个耿直人来投一口
-- 看哈哪些兄弟伙来过
+- Put out a request
+- Say what you want to eat
+- Leave a payout method
+- Share the link
+- Wait for someone kind to chip in
+- See who showed up
 
-没有 VPS。
+No VPS. No backend to babysit. No payment processing. No blockchain listener. No private keys.
 
-没有复杂后端。
+Just a small, lightweight, slightly rough-around-the-edges meal jar that actually runs.
 
-没有支付系统。
+## 🍽️ Why "Fanwaner"?
 
-没有区块链实时监听。
+The original project is Chinese and called **饭碗儿** (fànwǎnr) — literally "rice bowl". In Chinese, a rice bowl is a metaphor for your livelihood: *"don't break your rice bowl."*
 
-没有钱包私钥。
-
-就是一个简单、轻量、有点土、但是能真正跑起来的互联网饭碗儿。
-
-## 🍚 为啥子叫饭碗儿？
-
-因为人活到嘛，总归要吃饭。
-
-以前我们说：
-
-"搞钱。"
-
-现在换个说法：
-
-"先把饭碗儿端稳。"
-
-互联网这么大。
-
-有人写代码。
-
-有人做视频。
-
-有人搞开源。
-
-有人创业。
-
-有人刚好今天没得饭吃。
-
-那就：
-
-**先把饭碗儿摆出来嘛。**
+That metaphor doesn't survive translation — "rice bowl" means nothing to an English speaker. So the English build keeps the name **Fanwaner** but drops the metaphor: it's framed as a **meal** you put out for someone to cover. Same idea, no translation tax.
 
 ---
 
-## ✨ 特性
+## ✨ Features
 
-- 🍚 **摆饭碗儿**：写清楚想吃啥、为啥吃、想整多少钱、啷个收，甩个链接出去
-- 💰 **投一口**：看到微信/支付宝/USDT（TRC20 / BEP20）/ PayPal 收款码或地址，自己去外面付款，回来报个到
-- 📝 **投喂记录**：每个饭碗儿都有耿直人记录 + 排行榜（哪些兄弟伙最耿直）
-- 🔔 **留言提醒**：碗主人可配企业微信 / Telegram / Server酱 / 邮箱，有人留言第一时间喊你（异步推送，不拖慢投喂）
-- 🙅 **待放行 + 遭拒**：碗主人能看到"等放行"和"遭你否了的"（嘴上说投了没真转钱那种），记一哈免得再上当
-- 🍽️ **吃饱收摊**：首页底部折叠区单独收纳吃饱 / 饭凉了 / 收摊的碗，和"还没吃饭"的分开
-- 🛡️ **防刷**：Turnstile 人机验证 + 每 IP 每天只能摆一个饭碗儿（IP 只存哈希）
-- 🖼️ **OG 分享图**：每个饭碗儿自动生成 1200×630 分享图（微信/Telegram/X 都认）
-- 📱 **移动端**：原生 HTML/CSS/JS，零构建，手机上一样巴适
+- 🍔 **Put out a request** — what you want, why, how much, how to get paid. Get a link.
+- 💰 **Chip in** — pay the person *directly* (PayPal / Stripe / Ko-fi / Buy Me a Coffee / Wise / Revolut / crypto / WeChat / Alipay), then come back and log it.
+- 📝 **Contribution log** — every request keeps a record of who chipped in, plus a leaderboard of the most generous supporters.
+- 🔔 **Notifications** — the owner can wire up Discord, Slack, Telegram, ntfy, Pushover, email, a generic webhook, or the Chinese services (WeCom / ServerChan / email). Pushed asynchronously so it never slows down a contribution.
+- 🙅 **Reject after the fact** — contributions go live immediately, but the owner can reject a bogus one later and the amount is deducted back automatically.
+- 🍽️ **Fully funded & closed** — funded / expired / taken-down requests are tucked into a collapsible section at the bottom of the home page, separate from the ones still hungry.
+- 🛡️ **Anti-abuse** — Cloudflare Turnstile plus one request per IP per day (IPs are stored hashed only).
+- 🖼️ **Share cards** — every request gets an auto-generated 1200×630 OG image (works on X, Discord, Slack, Telegram, iMessage…).
+- 🌍 **Multi-language & multi-currency** — English/Chinese UI, 17 currencies, and per-request payout + notification settings.
+- 📱 **Mobile-first** — plain HTML/CSS/JS, zero build step.
 
-## 🏗️ 技术栈
+## 🌍 Internationalization
 
-| 层 | 用的啥子 |
+This fork was localized for a non-Chinese audience. What changed:
+
+| Area | Before | After |
+|---|---|---|
+| UI language | Chinese / Chongqing dialect only | `en` + `zh`, switchable in the header, remembered in a cookie |
+| Language detection | — | `?lang=` → `lang` cookie → `Accept-Language` → `DEFAULT_LOCALE` |
+| Currency | CNY hardcoded (`target_cents`, `≤100000` CHECK) | 17 currencies, per-request; zero-decimal currencies (JPY/KRW) handled correctly |
+| Payout methods | WeChat, Alipay, USDT (TRC20/BEP20), PayPal | + Stripe, Ko-fi, Buy Me a Coffee, Wise, Revolut, BTC, ETH, SOL, USDT-ERC20 |
+| Notification channels | WeCom, ServerChan, Telegram, email | + Discord, Slack, ntfy, Pushover, generic webhook |
+| API errors | Chinese literals | localized via `src/lib/locales.js` |
+| OG share image | Chinese text, ¥ amounts, 16 MB CJK font | localized, currency-aware, latin font supported (~300 KB) |
+| Time display | hardcoded UTC+8 | rendered in the visitor's local timezone |
+
+Server-side copy lives in `src/lib/locales.js`; client-side copy lives in
+`static/i18n/en.json` and `static/i18n/zh.json` — 365 keys, kept in lockstep by `npm run check`.
+
+**Adding a language:** copy `static/i18n/en.json` → `static/i18n/xx.json`, add `xx` to
+`SUPPORTED` in `static/js/i18n.js`, then add an `xx` block to `src/lib/locales.js` and
+register it in `SUPPORTED_LOCALES`. Nothing else needs to change.
+
+> 📖 A longer, Chinese-language write-up of the whole localization effort — including the
+> remaining gaps — is in [`docs/I18N_GUIDE.md`](docs/I18N_GUIDE.md).
+
+## 🏗️ Tech stack
+
+| Layer | What |
 |---|---|
-| 前端 | 纯 HTML/CSS/JS，零构建 |
-| API / 托管 | Cloudflare Worker（单 Worker 一体托管） |
-| 数据库 | Cloudflare D1（SQLite） |
-| 图片 / 字体 | Cloudflare R2 |
-| 人机验证 | Cloudflare Turnstile |
-| OG 图 | cf-workers-og（Satori + resvg WASM） |
-| 代码 | GitHub + MIT 开源 |
+| Frontend | Plain HTML/CSS/JS, zero build |
+| API / hosting | Cloudflare Workers (one Worker serves everything) |
+| Database | Cloudflare D1 (SQLite) |
+| Images / fonts | Cloudflare R2 |
+| Bot protection | Cloudflare Turnstile |
+| OG images | cf-workers-og (Satori + resvg WASM) |
+| Source | GitHub, MIT |
 
-## 📁 目录结构
+## 📁 Project structure
 
 ```
-饭碗儿/
-├── wrangler.toml              # Worker / assets / D1 / R2 / vars 配置
-├── schema.sql                 # 完整建表 DDL（与 migrations 同步）
-├── migrations/0001_init.sql   # D1 迁移
+fanwaner/
+├── wrangler.toml              # Worker / assets / D1 / R2 / vars config
+├── schema.sql                 # Full DDL (kept in sync with migrations)
+├── migrations/                # D1 migrations 0001 … 0007 (0007 = i18n + multi-currency)
 ├── src/
-│   ├── index.js               # Worker 入口：/api/*、/i/*、/og/*、静态资源分流
-│   ├── assets.js              # 静态资源 + bowl.html 的 OG meta 动态注入
+│   ├── index.js               # Worker entry: /api/*, /i/*, /og/*, static assets
+│   ├── assets.js              # Static assets + dynamic OG meta injection for bowl.html
 │   ├── api/                   # bowls / donations / upload / admin / og
-│   └── lib/                   # resp / validate / turnstile / ip / slug / db / og-render
+│   └── lib/                   # resp, validate, turnstile, ip, slug, db,
+│                              # og-render, i18n, locales, currency
 ├── static/
-│   ├── index.html             # 首页（大饭桌）
-│   ├── create.html            # 摆个饭碗儿
-│   ├── bowl.html              # 饭碗儿详情
-│   ├── admin.html             # 后台
-│   ├── 404.html               # 饭碗儿遭你整丢了
-│   ├── css/style.css          # 土味精致主题
-│   ├── js/                    # api.js / index.js / create.js / bowl.js / admin.js
-│   └── img/                   # logo / 碗 / 米粒 SVG
-├── scripts/
-│   ├── download-font.mjs      # 下载中文字体到本地
-│   └── upload-font.mjs        # 上传字体到 R2
-└── .github/workflows/deploy.yml  # 手动 Run workflow 才迁移 D1 + 部署（不自动触发）
+│   ├── index.html             # Home
+│   ├── create.html            # Put out a request
+│   ├── bowl.html              # Request detail
+│   ├── admin.html             # Admin
+│   ├── 404.html               # Not found
+│   ├── css/style.css
+│   ├── i18n/                  # en.json, zh.json — client-side copy
+│   └── js/                    # api, i18n, index, create, bowl, admin
+├── scripts/                   # download-font, upload-font, gen-prod-config
+├── docs/                      # I18N_GUIDE.md, email-notification guide (zh)
+└── .github/workflows/deploy.yml   # Manual "Run workflow" → migrate D1 + deploy
 ```
 
-## 🚀 本地跑起来
+## 🚀 Run it locally
 
-前置：装好 [Node.js 18+](https://nodejs.org/)、`wrangler login` 登录了 Cloudflare 账号。
+Requires [Node.js 18+](https://nodejs.org/) and a logged-in Cloudflare account (`wrangler login`).
 
 ```bash
-# 1. 拉代码装依赖
-git clone <你的仓库地址> && cd 饭碗儿
+# 1. Clone and install
+git clone https://github.com/<your-username>/fanwaner.git
+cd fanwaner
 npm i
 
-# 2. 创建 D1 数据库和 R2 桶，把返回的 database_id 填进 wrangler.toml
-wrangler d1 create fanwaner
-wrangler r2 bucket create fanwaner-assets
+# 2. Create the D1 database and R2 bucket; paste the database_id into wrangler.toml
+npx wrangler d1 create fanwaner
+npx wrangler r2 bucket create fanwaner-assets
 
-# 3. 建 Turnstile 站点（https://dash.cloudflare.com → Turnstile → 添加站点）
-#    拿到 Site Key 填到 wrangler.toml 的 TURNSTILE_SITE_KEY
+# 3. Create a Turnstile site (dash.cloudflare.com → Turnstile)
+#    and put the Site Key into wrangler.toml as TURNSTILE_SITE_KEY
 
-# 4. 本地密钥（复制 .env.example 为 .dev.vars，填三个 secret）
+# 4. Local secrets (copy the example, fill in three values)
 cp .env.example .dev.vars
 
-# 5. 建本地表 + 起开发服务
+# 5. Apply migrations locally and start the dev server
 npm run db:local
 npm run dev
 ```
 
-打开 `http://localhost:8787`，走一遍：摆个饭碗儿 → 详情 → 投一口 → 后台审核。
+Open `http://localhost:8787` and walk the loop: create a request → detail page → chip in → admin.
 
-> 本地开发时 Turnstile 没配 secret 会自动跳过人机验证，方便调试；线上必须配。
+> Turnstile is skipped locally when no secret is configured, which makes debugging easy.
+> It is **required** in production.
 
-## ☁️ 部署到 Cloudflare（纯线上，小白友好）
+## ☁️ Deploy to Cloudflare (no CLI needed)
 
-**全程网页操作，不用装任何东西、不用敲一行命令。**
+Everything below happens in a browser — nothing to install, no commands to run.
 
-### 1. Fork 仓库
+### 1. Fork the repo
 
-到 [GitHub 仓库页](https://github.com/cunzhangcrypto/fanwan) 点右上角 **Fork**，Fork 到自己的账号下。
+Open [github.com/cunzhangcrypto/fanwan](https://github.com/cunzhangcrypto/fanwan) and click **Fork**.
+(Or use your own fork/remote — see notes at the bottom.)
 
-### 2. Cloudflare 控制台准备（约 5 分钟，全网页点）
+### 2. Prepare Cloudflare (~5 minutes, all clicks)
 
-打开 [dash.cloudflare.com](https://dash.cloudflare.com)：
+Open [dash.cloudflare.com](https://dash.cloudflare.com):
 
-1. **创建 D1 数据库**：Workers & Pages → D1 → Create database，名字随便（如 `fanwaner`）→ 创建后**复制 Database ID**
-2. **创建 R2 桶**：R2 → Create bucket，名字 `fanwaner-assets`（可改）
-3. **创建 Turnstile 站点**：Turnstile → Add site，域名先填 `*` 或你的 workers.dev 域名 → 拿到 **Site Key** 和 **Secret Key**
-4. **创建 API Token**：右上头像 → My Profile → API Tokens → Create Token → 选模板 **Edit Cloudflare Workers** → Create → **复制 Token**
-5. **复制 Account ID**：控制台首页右下角
+1. **D1 database** — Workers & Pages → D1 → Create database (name it `fanwaner`) → copy the **Database ID**
+2. **R2 bucket** — R2 → Create bucket, named `fanwaner-assets`
+3. **Turnstile site** — Turnstile → Add site (domain can be `*` for now) → copy the **Site Key** and **Secret Key**
+4. **API token** — avatar (top right) → My Profile → API Tokens → Create Token → template **Edit Cloudflare Workers** → Create → copy the token
+5. **Account ID** — shown in the right-hand sidebar of the dashboard
 
-### 3. GitHub 仓库填 Secrets
+### 3. Add GitHub Actions secrets
 
-在自己 Fork 的仓库 → Settings → Secrets and variables → Actions → **New repository secret**，加下面这些（前 8 个必填，后 1 个通知可选）：
+In your fork: **Settings → Secrets and variables → Actions → New repository secret**.
 
-| Secret 名 | 填啥子 |
+| Secret | Value |
 |---|---|
-| `CLOUDFLARE_API_TOKEN` | 第 2 步的 API Token |
-| `CLOUDFLARE_ACCOUNT_ID` | 第 2 步的 Account ID |
-| `D1_DATABASE_ID` | 第 2 步的 Database ID |
-| `R2_BUCKET` | 桶名（默认 `fanwaner-assets`） |
+| `CLOUDFLARE_API_TOKEN` | step 2.4 |
+| `CLOUDFLARE_ACCOUNT_ID` | step 2.5 |
+| `D1_DATABASE_ID` | step 2.1 |
+| `R2_BUCKET` | bucket name (default `fanwaner-assets`) |
 | `TURNSTILE_SITE_KEY` | Turnstile Site Key |
 | `TURNSTILE_SECRET_KEY` | Turnstile Secret Key |
-| `SERVER_SECRET` | 随便编一串乱码（IP 哈希盐） |
-| `ADMIN_KEY` | 随便编一串（后台钥匙） |
-| `TELEGRAM_BOT_TOKEN` | （可选）Telegram Bot Token，配了碗主人才能收电报提醒 |
+| `SERVER_SECRET` | any random string (IP-hash salt) |
+| `ADMIN_KEY` | any random string (admin bearer token) |
+| `TELEGRAM_BOT_TOKEN` | *(optional)* only needed if owners should get Telegram pings |
 
-> 通知密钥不配也行：只是碗主人填了对应通知方式也发不出去，其余功能不受影响。
-> 邮箱提醒不需要部署者配任何密钥：邮件由碗主人自己在「编辑碗 → 留言提醒」里配自己的邮件 API（详见下文），走的是碗主人的额度。
+> Notification secrets are optional — if you skip them, owners who wired up those channels
+> just won't receive pings; everything else works.
+> **Email notifications need no secrets**: the owner configures their own email API
+> (see below), billed to their own account, not yours.
 
-> `SITE_URL` 不用配：分享图链接自动取当前访问域名生成，绑自定义域名也自动正确。
+> `SITE_URL` is not required — share-image URLs are built from the incoming request host,
+> so they stay correct with or without a custom domain.
 
-### 4. 触发部署
+### 4. Trigger the deploy
 
-自己仓库 → Actions → 左侧 **Deploy** → **Run workflow**。
+Your repo → **Actions** → **Deploy** → **Run workflow**.
 
-等 1-2 分钟，Actions 全绿就部署好了：自动完成建表 → 传字体 → 设密钥 → 上线。
+After 1–2 minutes, if the run is green you're live: it applies migrations → uploads the font →
+sets Worker secrets → deploys.
 
-### 5. 打开验证
+### 5. Verify
 
-部署日志里会出现 `https://fanwaner.你的用户名.workers.dev`，打开就能用了。OG 分享图链接会自动用当前域名拼，不用额外配置。
+The deploy log prints your `https://fanwaner.<your-subdomain>.workers.dev` URL. Open it.
 
-> 想绑自己的域名：Workers → fanwaner → Settings → Domains & Routes → Add 自定义域名即可，分享链接同样自动跟着新域名走。
+To use a custom domain: Workers → fanwaner → Settings → Domains & Routes → Add.
 
 ---
 
-## 🧑‍💻 命令行部署（进阶，作者/开发者用）
+## 🧑‍💻 Deploy from the CLI (advanced)
 
 ```bash
-# 1. 密钥（不要写进仓库；后 1 个通知可选）
-wrangler secret put TURNSTILE_SECRET_KEY
-wrangler secret put SERVER_SECRET      # 随便一串随机字符，用于 IP 哈希
-wrangler secret put ADMIN_KEY          # 后台管理钥匙（Bearer Token）
-wrangler secret put TELEGRAM_BOT_TOKEN # （可选）电报提醒
+# 1. Secrets — never commit these
+npx wrangler secret put TURNSTILE_SECRET_KEY
+npx wrangler secret put SERVER_SECRET       # random string, used for IP hashing
+npx wrangler secret put ADMIN_KEY           # admin bearer token
+npx wrangler secret put TELEGRAM_BOT_TOKEN  # optional
 
-# 2. 同步线上表结构
+# 2. Apply migrations (7 total, including the i18n/multi-currency one)
 npm run db:remote
 
-# 3. 上传中文字体（OG 分享图用，约 16MB）
-npm run font:download
+# 3. Upload a font for OG images
+npm run font:download   # ~16 MB CJK font by default
 npm run font:upload
 
-# 4. 部署
+# 4. Deploy
 npm run deploy
 ```
 
-然后把 `SITE_URL`（如 `https://fanwaner.你的名字.workers.dev`）填进 `wrangler.toml` 的 `[vars]`，再 deploy 一次，让 OG 图链接拼对。
+> ⚠️ **Back up first.** Migration `0007_i18n.sql` **rebuilds the `bowls` and `donations`
+> tables** (SQLite can't alter a CHECK constraint in place). Always run
+> `npx wrangler d1 export fanwaner --remote --output backup.sql` before applying it to
+> a database that already has data.
 
-想绑定自定义域名，在 `wrangler.toml` 里加：
+For an English-facing deployment, swap the font to a latin one — it's ~300 KB instead of 16 MB:
+
+```toml
+R2_FONT_KEY = "fonts/NotoSans-Regular.ttf"
+```
+
+The font family name is derived from the R2 key automatically
+(`NotoSans-Regular.ttf` → `NotoSans`); override with `OG_FONT_NAME` if your key doesn't match.
+
+Custom domain:
 
 ```toml
 routes = [{ pattern = "fanwaner.example.com", custom_domain = true }]
 ```
 
-## 🔑 环境变量
+## 🔑 Environment variables
 
-| 变量 | 放哪 | 说明 |
+**Secrets** (Worker secrets / GitHub Actions secrets):
+
+| Name | Purpose |
+|---|---|
+| `TURNSTILE_SECRET_KEY` | Server-side Turnstile verification |
+| `SERVER_SECRET` | Salt for IP hashing (daily limit) |
+| `ADMIN_KEY` | Admin bearer token |
+| `TELEGRAM_BOT_TOKEN` | *(optional)* only if owners should get Telegram pings |
+
+**`[vars]` in `wrangler.toml`:**
+
+| Name | Default | Purpose |
 |---|---|---|
-| `TURNSTILE_SITE_KEY` | `wrangler.toml` `[vars]` | Turnstile 站点公开 key（前端用） |
-| `TURNSTILE_SECRET_KEY` | Secret | Turnstile 服务端校验 key |
-| `SERVER_SECRET` | Secret | IP 日限哈希盐，随机字符串 |
-| `ADMIN_KEY` | Secret | 后台 Bearer Token |
-| `MAX_AMOUNT_YUAN` | `[vars]` | 金额上限（默认 1000 元） |
-| `MAX_UPLOAD_BYTES` | `[vars]` | 图片上传上限（默认 2MB） |
-| `R2_FONT_KEY` | `[vars]` | OG 字体在 R2 的 key |
-| `TELEGRAM_BOT_TOKEN` | Secret | （可选）Telegram Bot Token，碗主人填了 chat_id 才能收电报提醒 |
+| `TURNSTILE_SITE_KEY` | `""` | Public Turnstile site key used by the frontend |
+| `MAX_AMOUNT_YUAN` | `1000` | Per-entry amount cap, in **major units of the request's currency** (USD → $1000, JPY → ¥1000). Legacy name. |
+| `MAX_UPLOAD_BYTES` | `2097152` | Image upload cap (2 MB) |
+| `R2_FONT_KEY` | `fonts/NotoSansSC-Regular.otf` | Font used by the OG renderer |
+| `OG_FONT_NAME` | *(derived)* | Font family name; usually unnecessary |
+| `SITE_URL` | `""` | Not needed — share URLs use the request host |
+| `DEFAULT_LOCALE` | `en` | Fallback UI/API language (`en` / `zh`) |
+| `DEFAULT_CURRENCY` | `USD` | Default currency for new requests |
+| `NTFY_API` | `https://ntfy.sh` | Point at a self-hosted ntfy instance if you prefer |
+| `AUTO_APPROVE_DONATIONS` | `true` | `true` = contributions go live instantly; `false` = owner must approve first |
 
-> 通知四连（企业微信 / Telegram / Server酱 / 邮箱）里，企业微信、Server酱、邮箱都是碗主人自己配的（webhook / SendKey / 邮件 API），平台不用配密钥；只有 Telegram 需要部署者配上面的 Bot Token。
-> OG 图链接不需要 `SITE_URL`：`assets.js` 直接用当前请求域名拼，部署/绑域名都自动正确。
+## 📧 Email notifications (owner-configured, zero cost to the host)
 
-## 📧 邮箱提醒（碗主人自配，平台零成本零额度）
+Email doesn't go through any platform mailbox. The owner enters their own email API in
+the request's notification settings; the Worker just POSTs to it. Any
+**Resend-compatible** HTTP email API works.
 
-邮件不走平台的邮箱服务：由碗主人自己在「编辑碗 → 留言提醒」里填自己邮件服务的 API，平台只负责把通知 POST 给碗主人填的接口，消耗的是碗主人自己的额度，跟部署者莫得关系。
+Using [Resend](https://resend.com) (free tier is enough, no card required):
 
-推荐用 **Resend**（免费层够用，不用绑卡）：
+1. Sign up, go to **API Keys**, create a key (starts with `re_`)
+2. In the request's notification settings, fill in:
+   - **Recipient email** — where pings should go
+   - **Email API URL** — `https://api.resend.com/emails` (the default)
+   - **Email API key** — the `re_xxx` value
+   - **From** — optional; defaults to `onboarding@resend.dev`. To send from your own
+     domain, verify it with Resend and use the `Alias <email>` format.
+3. Save. Notes on your request now trigger an email.
 
-1. 注册 [resend.com](https://resend.com)，进 **API Keys** 建一个 Key（`re_` 开头）
-2. 在饭碗儿「编辑碗 → 留言提醒」里填：
-   - **收件邮箱**：想收到提醒的邮箱（QQ 邮箱等都行）
-   - **邮件 API 地址**：`https://api.resend.com/emails`（默认值）
-   - **邮件 API Key**：上一步建的 `re_xxx`
-   - **发件人**：可选，默认 `onboarding@resend.dev`；想用自己的域名发信，按 Resend 提示验证域名后填「别名 <邮箱>」格式
-3. 保存即可，之后有人在你碗儿头留言，就自动发一封邮件提醒
-
-> 也支持任何 Resend 兼容格式的 HTTP 邮件 API（自建服务也行），只要改「邮件 API 地址」。
-> API Key 是敏感信息：编辑时不会回显、接口也不会返回，不填就保留原来的。
+> API keys are never echoed back or returned by the API; leaving the field blank keeps
+> the existing key.
 
 ## 🔌 API
 
-统一返回 `{ ok, data }` 或 `{ ok: false, error: { code, message } }`。
+All responses are `{ ok, data }` or `{ ok: false, error: { code, message } }`.
+Error `message` is localized based on the request language.
 
-| 接口 | 说明 |
+| Endpoint | Description |
 |---|---|
-| `GET /api/config` | 下发 Turnstile sitekey、金额上限等公开配置 |
-| `GET /api/bowl` | 饭碗儿列表（支持 `?status=&sort=&page=`；status 可逗号多选，如 `completed,expired,hidden`） |
-| `POST /api/bowl` | 摆个饭碗儿（Turnstile + IP 日限 + 字段校验） |
-| `GET /api/bowl/:slug` | 饭碗儿详情（含已放行的投喂记录；状态懒更新：过期/吃饱） |
-| `PUT /api/bowl/:slug` | 改饭碗儿（需 editToken） |
-| `GET /api/bowl/:slug/pending` | 自家待放行 + 遭拒投喂（需 `?token=editToken`，返回 `{ pending, rejected }`） |
-| `POST /api/donation` | 投一口（写入待审核；碗主人配了通知就异步推送） |
-| `DELETE /api/donation/:id` | 撤回自己的投喂（需 deleteToken，仅待审核可删） |
-| `POST /api/upload` | 图片上传到 R2（头像/收款码） |
-| `GET /api/admin/pending` | 后台：待审核投喂（Bearer ADMIN_KEY） |
-| `POST /api/admin/approve` | 放他过（累加金额，幂等） |
-| `POST /api/admin/reject` | 这个不行 |
-| `POST /api/admin/delete` | 端走（投喂或饭碗儿） |
-| `GET /i/:key` | 读取 R2 图片（immutable 缓存） |
-| `GET /og/:slug.png` | 饭碗儿 OG 分享图（懒生成 + R2 缓存） |
+| `GET /api/config` | Public config: Turnstile site key, amount cap, default locale/currency, currency list, payout methods, auto-approve flag |
+| `GET /api/bowl` | List requests (`?status=&sort=&page=`; `status` accepts a comma list like `completed,expired,hidden`) |
+| `POST /api/bowl` | Create a request (Turnstile + daily IP limit + validation). Accepts `currency`, `language`, payout and notification fields |
+| `GET /api/bowl/:slug` | Request detail, including published contributions (status is lazily refreshed: expired / funded) |
+| `PUT /api/bowl/:slug` | Edit a request (requires `editToken`). Currency is locked once money has come in |
+| `GET /api/bowl/:slug/pending` | Owner view (`?token=editToken`) → `{ pending, rejected, approved, autoApprove }` |
+| `POST /api/bowl/:slug/approve` | Publish a pending contribution (no-op when auto-approve is on) |
+| `POST /api/bowl/:slug/reject` | Reject a contribution; if it was already counted, the amount is refunded back |
+| `POST /api/donation` | Chip in. **Published instantly by default** (`AUTO_APPROVE_DONATIONS`); notifications are pushed asynchronously |
+| `DELETE /api/donation/:id` | Withdraw your own contribution (requires `deleteToken`) |
+| `POST /api/upload` | Upload an image to R2 (avatar / payout QR) |
+| `GET /api/admin/pending` | Admin: pending + recently published contributions (`Bearer ADMIN_KEY`) |
+| `POST /api/admin/approve` / `reject` / `delete` | Admin moderation |
+| `GET /i/:key` | Serve an R2 image (immutable cache) |
+| `GET /og/:slug.png` | OG share image, lazily rendered and cached in R2. Language follows the request's stored language |
 
-## 🛡️ 防刷与安全
+## 🛡️ Anti-abuse & security
 
-- **Turnstile**：创建饭碗儿、投一口都要过；前端 `GET /api/config` 拿 sitekey，Worker 端再用 secret 二次验证
-- **IP 日限**：`daily_key = SHA-256(ip + 日期 + SERVER_SECRET)`，DB 唯一约束兜底并发；IP 不明文落库（投喂记录也只存哈希）
-- **XSS**：所有用户内容用 `textContent` 渲染
-- **后台**：`ADMIN_KEY` 走 Bearer Token，只存在 Worker Secret
-- **上传**：前端统一转 webp（canvas）+ 后端魔数校验只收 webp + 2MB 上限 + 轻量 IP 限流
+- **Turnstile** on both creating a request and chipping in: the frontend fetches the site
+  key from `GET /api/config`, and the Worker re-verifies server-side with the secret.
+- **Daily IP limit** — `daily_key = SHA-256(ip + date + SERVER_SECRET)` with a DB unique
+  constraint to survive races. Raw IPs are never stored, and contribution records only
+  keep the hash.
+- **XSS** — all user content is rendered via `textContent`.
+- **Admin** — `ADMIN_KEY` as a bearer token, stored only as a Worker secret.
+- **Uploads** — the frontend converts to webp via canvas; the backend verifies the magic
+  bytes, enforces 2 MB, and rate-limits per IP.
 
-## 🍚 赏口饭吃
+## 💛 Support this project
 
-写代码的也要吃饭嘛。觉得饭碗儿好用、帮到了你，欢迎赏一口，让作者也端稳饭碗儿。
+Fanwaner is free and MIT-licensed. If it's useful to you, you can:
 
-| 微信 | 支付宝 |
-|---|---|
-| <img src="static/img/donate/wechat.png" width="180" alt="微信打赏" /> | <img src="static/img/donate/alipay.png" width="180" alt="支付宝打赏" /> |
+- Star the repo, or send a pull request
+- Chip in on the upstream author's page — their payout details (WeChat / Alipay / USDT)
+  are in [README.zh-CN.md](README.zh-CN.md#-赏口饭吃)
+- **Running your own instance?** Replace that section with your own payout details before
+  you publish, so people don't send money to the wrong place.
 
-| USDT (TRC20) | USDT (BEP20) |
-|---|---|
-| <img src="static/img/donate/trc20.png" width="180" alt="USDT TRC20 打赏" /> | <img src="static/img/donate/bep20.png" width="180" alt="USDT BEP20 打赏" /> |
+## ⚠️ Disclaimer
 
-**USDT 地址（转之前看清楚哈）：**
+Fanwaner is **not** a payment platform. It does not collect, hold, or move money, and it
+does not watch the blockchain.
 
-- TRC20：`TLRi2gcqVmmgqtXBYyHuviLRxY2eeiuXk9`
-- BEP20：`0x88f9908344E711bffcB95b26aeF54fe3d56b919B`
+Money goes **directly** from the supporter to the person asking. Fanwaner only records
+that someone chipped in.
 
-## ⚠️ 免责声明
-
-饭碗儿不是支付平台，不收钱、不托管钱、不监听链上。
-
-投一口的钱是你**直接**给饭碗儿主人的，饭碗儿这里只负责记一笔"有人投过"。
-
-USDT 地址转之前看清楚哈，地址错了，饭碗儿也救不回来。
-
-## 🔍 验收清单（需求文档 §71 简版）
-
-- [x] 首页重庆土味、Logo 是饭碗儿
-- [x] 按钮叫"摆个饭碗" / "投一口"
-- [x] 无轮询、无 WebSocket、无支付网关、无余额系统
-- [x] Turnstile 生效、每 IP 每天只能摆一个饭碗儿
-- [x] 可创建 / 分享 / 投一口 / 审核 / 排行榜 / 空状态 / 重庆味 404 / 分享卡片
-- [x] 手机端正常、GitHub README 完整、Cloudflare 可直接部署
+Double-check addresses before sending — a wrong address cannot be undone by anyone.
 
 ## 📄 License
 
@@ -322,4 +343,4 @@ USDT 地址转之前看清楚哈，地址错了，饭碗儿也救不回来。
 
 ---
 
-> 莫问，问就是先吃饭。🍚
+> Don't ask. Just eat first. 🍔
