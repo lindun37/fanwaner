@@ -20,7 +20,8 @@
   --green: #6f9a4e;
   --shadow: 0 10px 30px rgba(173, 141, 94, 0.14);
   --radius: 18px;
-  --font: "Noto Serif SC", "Songti SC", "PingFang SC", "Microsoft YaHei", serif;
+  /* i18n：拉丁字体在前（英文/欧洲语言更好看），中文字体兜底 */
+  --font: "Iowan Old Style", "Palatino Linotype", "Georgia", "Noto Serif SC", "Songti SC", "PingFang SC", "Microsoft YaHei", serif;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -1000,4 +1001,74 @@ img { max-width: 100%; }
   margin: 0 0 2px;
   padding-top: 14px;
   font-weight: 700;
+}
+
+/* ============================================================
+   🌍 i18n 新增样式：语言切换 / 币种选择 / 支付方式分组
+   ============================================================ */
+
+.lang-switch {
+  display: inline-flex;
+  gap: 4px;
+  padding: 3px;
+  background: var(--bg-2);
+  border: 1.5px solid var(--line);
+  border-radius: 999px;
+}
+.lang-btn {
+  border: none;
+  background: transparent;
+  color: var(--ink-soft);
+  font-family: var(--font);
+  font-size: 13px;
+  line-height: 1;
+  padding: 6px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background .15s, color .15s;
+}
+.lang-btn:hover { color: var(--ink); }
+.lang-btn.active {
+  background: var(--card);
+  color: var(--gold-deep);
+  font-weight: 700;
+  box-shadow: 0 1px 4px rgba(173, 141, 94, 0.2);
+}
+
+/* 目标金额：币种 + 数字并排 */
+.amount-row {
+  display: flex;
+  gap: 10px;
+  align-items: stretch;
+}
+.currency-select {
+  flex: 0 0 auto;
+  min-width: 108px;
+  padding: 10px 12px;
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--card);
+  color: var(--ink);
+  font-family: var(--font);
+  font-size: 15px;
+  cursor: pointer;
+}
+.amount-row input[type="number"] {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* 支付方式分组小标题 */
+.pay-group-label {
+  margin: 18px 0 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink-soft);
+  letter-spacing: .02em;
+}
+.pay-group-label:first-of-type { margin-top: 10px; }
+
+@media (max-width: 520px) {
+  .amount-row { flex-direction: column; }
+  .currency-select { width: 100%; }
 }

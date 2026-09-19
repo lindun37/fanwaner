@@ -1,34 +1,72 @@
-/* 🍚 饭碗儿 —— 饭碗儿详情页 */
+/* 🍔 饭碗儿 / Fanwaner —— 饭碗详情页 */
 (() => {
-  const { $, $$, get, post, toast, yuan, fmtTime, mealState, progressText, pick } = FW;
+  const { $, $$, get, post, toast, money, fmtTime, fmtDate, mealState, progressText, pick, T, MONEY } = FW;
+  const esc = (s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
   // 兼容两种入口：老式 /bowl.html?slug=xxx 和新式 /cunzhang
   const slug =
     new URLSearchParams(location.search).get("slug") ||
     location.pathname.replace(/^\//, "").split("/")[0] ||
     "";
+
   let bowl = null;
   let donations = [];
-  let payMethod = "wechat";
+  let payMethod = "paypal";
   let turnstileToken = "";
   let turnstileWidget = null;
   let turnstileSiteKey = "";
+  let maxAmount = 1000;
 
-  const STATUS_MAP = {
-    active: ["🍚 还在讨生活", "s-active"],
-    completed: ["🍚 吃饱喽，收碗！", "s-done"],
-    expired: ["🍚 饭凉了，收碗了", "s-cold"],
-    hidden: ["🍚 收摊了", "s-cold"],
+  /* 每种收款方式依赖哪些字段（任一非空即认为「可用」） */
+  const METHOD_FIELDS = {
+    paypal: ["paypalQr", "paypalLink"],
+    stripe: ["stripeUrl"],
+    kofi: ["kofiUrl"],
+    buymeacoffee: ["bmcUrl"],
+    wise: ["wiseEmail"],
+    revolut: ["revolutUrl"],
+    btc: ["btcQr", "btcAddress"],
+    eth: ["ethAddress"],
+    sol: ["solAddress"],
+    usdt: ["usdtQr", "usdtAddress"],
+    usdt_bep20: ["usdtBep20Qr", "usdtBep20Address"],
+    usdt_erc20: ["usdtErc20Qr", "usdtErc20Address"],
+    wechat: ["wechatQr"],
+    alipay: ["alipayQr"],
   };
 
-  const PAY_LABEL = { wechat: "微信", alipay: "支付宝", usdt: "USDT(TRC20)", usdt_bep20: "USDT(BEP20)", paypal: "PayPal" };
+  // 展示顺序：海外常用在前，中国常用在后
+  const METHOD_ORDER = [
+    "paypal", "stripe", "kofi", "buymeacoffee", "wise", "revolut",
+    "btc", "eth", "sol", "usdt", "usdt_bep20", "usdt_erc20",
+    "wechat", "alipay",
+  ];
+
+  const payLabel = (m) => T("pay." + m);
+
+  function availableMethods() {
+    if (!bowl) return [];
+    return METHOD_ORDER.filter((m) =>
+      (METHOD_FIELDS[m] || []).some((f) => bowl[f])
+    );
+  }
+
+  // 金额：优先用最小单位 + 币种；后端没升级时回落到旧字段
+  const cur = () => (bowl && bowl.currency) || "CNY";
+  const minorOf = (o, key) =>
+    o[key + "Minor"] != null ? o[key + "Minor"] : Math.round(Number(o[key + "Yuan"] || 0) * 100);
+  const amountText = (o) => MONEY(minorOf(o, "amount"), o.currency || cur());
 
   /* ---------- 加载数据 ---------- */
   async function load() {
-    if (!slug) {
-      location.href = "/";
-      return;
-    }
+    if (!slug) { location.href = "/"; return; }
+    // 金额上限 / 币种等公开配置
+    try {
+      const cfg = await get("/api/config");
+      turnstileSiteKey = cfg.turnstileSiteKey || "";
+      if (cfg.maxAmountYuan) maxAmount = cfg.maxAmountYuan;
+    } catch { /* 拿不到就用默认值 */ }
+
     try {
       const data = await get(`/api/bowl/${slug}`);
       bowl = data.bowl;
@@ -40,12 +78,12 @@
       $("#loading").classList.add("hidden");
       document.querySelector(".detail-wrap").innerHTML = `
         <div class="empty" style="margin-top:40px;">
-          <img src="/img/bowl.svg" alt="空碗" />
-          <h2>哎呀，饭碗儿遭你整丢了。</h2>
-          <p>你找的这口饭，好像没摆在这儿。</p>
+          <img src="/img/bowl.svg" alt="${esc(T("bowl.emptyAlt"))}" />
+          <h2>${esc(T("bowl.loadFailedTitle"))}</h2>
+          <p>${esc(e.message || T("bowl.loadFailedSub"))}</p>
           <div class="btn-row" style="justify-content:center;">
-            <a class="btn btn-primary" href="/">🍚 回去吃饭</a>
-            <a class="btn" href="/#bowls">👀 去瞅哈别人的饭碗</a>
+            <a class="btn btn-primary" href="/">${esc(T("bowl.backHome"))}</a>
+            <a class="btn" href="/#bowls">${esc(T("bowl.browseOthers"))}</a>
           </div>
         </div>`;
     }
@@ -55,12 +93,13 @@
     const pct = bowl.percent;
     $("#d-title").textContent = bowl.title;
     $("#d-state").textContent = mealState(pct);
-    $("#d-current").textContent = `¥${yuan(bowl.currentYuan)}`;
-    $("#d-target").textContent = `¥${yuan(bowl.targetYuan)}`;
+    $("#d-current").textContent = MONEY(minorOf(bowl, "current"), cur());
+    $("#d-target").textContent = MONEY(minorOf(bowl, "target"), cur());
 
-    const [stText, stCls] = STATUS_MAP[bowl.status] || STATUS_MAP.active;
+    const stKey = { active: "bowl.statusActive", completed: "bowl.statusCompleted", expired: "bowl.statusExpired", hidden: "bowl.statusHidden" }[bowl.status] || "bowl.statusActive";
+    const stCls = { active: "s-active", completed: "s-done", expired: "s-cold", hidden: "s-cold" }[bowl.status] || "s-active";
     const st = $("#d-status");
-    st.textContent = stText;
+    st.textContent = T(stKey);
     st.className = `detail-status ${stCls}`;
 
     $("#d-fill").style.width = `${pct}%`;
@@ -72,33 +111,30 @@
     $("#d-reason").textContent = bowl.reason || "";
 
     const kv = [];
-    if (bowl.deadline) kv.push(`⏰ 截止 ${fmtTime(bowl.deadline)}`);
-    if (bowl.nickname) kv.push(`哪个的碗：${escapeHtml(bowl.nickname)} 摆的碗`);
+    if (bowl.deadline) kv.push(esc(T("bowl.deadlineKv", { date: fmtDate(bowl.deadline) })));
+    if (bowl.nickname) kv.push(esc(T("bowl.ownerKv", { name: bowl.nickname })));
     $("#d-kv").innerHTML = kv.join(" · ");
 
-    // 摆碗的本人可见"改一哈" + "复制管理链接"
+    // 摆碗的本人可见「改一哈」+「复制管理链接」
     const token = getEditToken(slug);
     if (token) {
       const btn = $("#btn-edit");
       btn.classList.remove("hidden");
-      btn.onclick = () => {
-        location.href = `/create.html?edit=${slug}&token=${encodeURIComponent(token)}`;
-      };
-      // 把这个带令牌的管理链接抄下来存起，以后随便哪个浏览器打开都是管理界面
+      btn.onclick = () => { location.href = `/create.html?edit=${slug}&token=${encodeURIComponent(token)}`; };
       const btnM = $("#btn-manage-link");
       btnM.classList.remove("hidden");
       btnM.onclick = async () => {
         await copyText(`${location.origin}/${slug}?token=${encodeURIComponent(token)}`);
-        toast("管理链接抄到起了，打开就直接是管理界面，随便哪个浏览器都行。");
+        toast(T("bowl.manageCopiedToast"));
       };
       renderPending(token);
     }
 
     renderRecords();
+    buildDonateTabs();
   }
 
   function getEditToken(slug2) {
-    // 优先认链接里甩进来的 ?token=（管理链接），再认本地存的
     const urlToken = new URLSearchParams(location.search).get("token") || "";
     let stored = "";
     try {
@@ -110,13 +146,12 @@
     } catch {}
     const token = urlToken || stored;
     if (token && token !== stored) {
-      // 记住这个浏览器，下次直接打开碗页就是管理界面
       try { localStorage.setItem("bowl_edit_token", JSON.stringify({ slug: slug2, token })); } catch {}
     }
     return token;
   }
 
-  /* ---------- 待放行投喂（仅摆碗的本人可见） ---------- */
+  /* ---------- 碗主人视角：待放行 + 已自动上墙 + 遭拒 ---------- */
   async function renderPending(token) {
     const section = $("#pending-section");
     const list = $("#pending-list");
@@ -125,44 +160,57 @@
     section.classList.remove("hidden");
     list.innerHTML = '<div class="spinner"></div>';
     if (rejList) rejList.innerHTML = "";
+
     let items = [];
     let rejected = [];
+    let approved = [];
     try {
       const data = await get(`/api/bowl/${slug}/pending?token=${encodeURIComponent(token)}`);
       items = data.pending || [];
       rejected = data.rejected || [];
+      approved = data.approved || [];
+      // 已自动上墙时，待放行区块改叫「复核」：仍可把不实的那笔拒了
+      const autoMode = !!data.autoApprove;
+      $("#pending-title").textContent = autoMode ? T("bowl.reviewTitle") : T("bowl.pendingTitle");
+      $("#pending-hint").textContent = autoMode ? "" : T("bowl.pendingHint");
     } catch (e) {
-      list.innerHTML = `<p style="color:var(--muted);">${escapeHtml(e.message || "没拉到待放行的。")}</p>`;
+      list.innerHTML = `<p style="color:var(--muted);">${esc(e.message || T("bowl.pendingLoadFailed"))}</p>`;
       return;
     }
-    if (!items.length) {
-      list.innerHTML = '<div class="empty" style="padding:24px 20px;"><h2 style="font-size:18px;">现在没得待放行的。</h2><p style="margin-bottom:0;">干净得很。</p></div>';
+
+    // 免放行模式下 pending 为空，但列出的 recent approved 同样可以拒
+    const reviewList = items.length ? items : approved;
+    const reviewMode = !items.length && approved.length > 0;
+
+    if (!reviewList.length) {
+      list.innerHTML = `<div class="empty" style="padding:24px 20px;"><h2 style="font-size:18px;">${esc(T("bowl.pendingEmptyTitle"))}</h2><p style="margin-bottom:0;">${esc(T("bowl.pendingEmptySub"))}</p></div>`;
     } else {
       list.innerHTML = "";
-      items.forEach((d) => {
+      reviewList.forEach((d) => {
         const el = document.createElement("div");
         el.className = "record pending-record";
         el.innerHTML = `
-          <div class="r-avatar">🍚</div>
+          <div class="r-avatar">${reviewMode ? "✅" : "🍔"}</div>
           <div class="r-main">
-            <div class="r-name">${escapeHtml(d.nickname)}<span class="amt" style="color:var(--gold-deep);">投了 ¥${yuan(d.amountYuan)}</span><small style="color:var(--muted);">${PAY_LABEL[d.paymentMethod] || d.paymentMethod}</small></div>
-            ${d.message ? `<div class="r-msg">“${escapeHtml(d.message)}”</div>` : ""}
-            <div class="r-time">${fmtTime(d.createdAt)}${d.txid ? ` · TXID：${escapeHtml(d.txid)}` : ""}</div>
+            <div class="r-name">${esc(d.nickname)}<span class="amt" style="color:var(--gold-deep);">${esc(T("bowl.donated", { amount: amountText(d) }))}</span><small style="color:var(--muted);">${esc(payLabel(d.paymentMethod))}</small></div>
+            ${d.message ? `<div class="r-msg">“${esc(d.message)}”</div>` : ""}
+            <div class="r-time">${esc(fmtTime(d.createdAt))}${d.txid ? ` · ${esc(T("bowl.txidLabel", { id: d.txid }))}` : ""}</div>
             <div class="pending-actions">
-              <button class="btn btn-sm btn-gold" data-act="approve" data-id="${d.id}">放他过</button>
-              <button class="btn btn-sm" data-act="reject" data-id="${d.id}">这个不行</button>
+              ${reviewMode ? "" : `<button class="btn btn-sm btn-gold" data-act="approve" data-id="${d.id}">${esc(T("bowl.approve"))}</button>`}
+              <button class="btn btn-sm" data-act="reject" data-id="${d.id}">${esc(T("bowl.reject"))}</button>
             </div>
           </div>`;
-        el.querySelector("[data-act='approve']").addEventListener("click", async (e) => {
+        const ap = el.querySelector("[data-act='approve']");
+        if (ap) ap.addEventListener("click", async (e) => {
           const b = e.currentTarget;
           b.disabled = true;
           try {
             await post(`/api/bowl/${slug}/approve`, { id: d.id, editToken: token });
-            toast("放他过了，饭钱记上了。");
+            toast(T("bowl.approveToast"));
             load();
           } catch (err) {
             b.disabled = false;
-            toast(err.message || "没放行起。");
+            toast(err.message || T("bowl.actionFailedToast"));
           }
         });
         el.querySelector("[data-act='reject']").addEventListener("click", async (e) => {
@@ -170,18 +218,17 @@
           b.disabled = true;
           try {
             await post(`/api/bowl/${slug}/reject`, { id: d.id, editToken: token });
-            toast("这口没要。");
+            toast(T("bowl.rejectToast"));
             renderPending(token);
           } catch (err) {
             b.disabled = false;
-            toast(err.message || "没操作起。");
+            toast(err.message || T("bowl.actionFailedToast"));
           }
         });
         list.appendChild(el);
       });
     }
 
-    // 遭拒的：一般就是嘴上说投了、其实没真转钱那种（莫放他过，也别个看不到）
     if (rejSection && rejList) {
       rejSection.classList.toggle("hidden", !rejected.length);
       if (rejected.length) {
@@ -192,9 +239,9 @@
           el.innerHTML = `
             <div class="r-avatar">🙅</div>
             <div class="r-main">
-              <div class="r-name">${escapeHtml(d.nickname)}<small style="color:var(--muted);">${PAY_LABEL[d.paymentMethod] || d.paymentMethod}</small></div>
-              ${d.message ? `<div class="r-msg">“${escapeHtml(d.message)}”</div>` : ""}
-              <div class="r-time">${fmtTime(d.createdAt)}</div>
+              <div class="r-name">${esc(d.nickname)}<small style="color:var(--muted);">${esc(payLabel(d.paymentMethod))}</small></div>
+              ${d.message ? `<div class="r-msg">“${esc(d.message)}”</div>` : ""}
+              <div class="r-time">${esc(fmtTime(d.createdAt))}</div>
             </div>`;
           rejList.appendChild(el);
         });
@@ -208,7 +255,7 @@
     list.innerHTML = "";
     if (donations.length) {
       $("#record-empty").classList.add("hidden");
-      $("#r-count").textContent = `共 ${donations.length} 笔`;
+      $("#r-count").textContent = T("bowl.recordsCount", { n: donations.length });
     } else {
       $("#record-empty").classList.remove("hidden");
       $("#r-count").textContent = "";
@@ -217,39 +264,35 @@
     donations.forEach((d) => {
       const el = document.createElement("div");
       el.className = "record";
+      const showNet = d.paymentMethod && d.paymentMethod !== "wechat" && d.paymentMethod !== "alipay";
       el.innerHTML = `
-        <div class="r-avatar">${d.anonymous ? "🙈" : "🍚"}</div>
+        <div class="r-avatar">${d.anonymous ? "🙈" : "🍔"}</div>
         <div class="r-main">
-          <div class="r-name">${escapeHtml(d.nickname)}<span class="amt">投了 ¥${yuan(d.amountYuan)}</span>${d.paymentMethod === "usdt" || d.paymentMethod === "usdt_bep20" ? ` <small style='color:var(--muted)'>${PAY_LABEL[d.paymentMethod]}</small>` : ""}</div>
-          ${d.message ? `<div class="r-msg">“${escapeHtml(d.message)}”</div>` : ""}
-          <div class="r-time">${fmtTime(d.createdAt)}</div>
+          <div class="r-name">${esc(d.nickname)}<span class="amt">${esc(T("bowl.donated", { amount: amountText(d) }))}</span>${showNet ? ` <small style='color:var(--muted)'>${esc(payLabel(d.paymentMethod))}</small>` : ""}</div>
+          ${d.message ? `<div class="r-msg">“${esc(d.message)}”</div>` : ""}
+          <div class="r-time">${esc(fmtTime(d.createdAt))}</div>
         </div>`;
       list.appendChild(el);
     });
 
-    // 排行榜：前 3 耿直人
-    const top = [...donations].sort((a, b) => b.amountYuan - a.amountYuan).slice(0, 3);
-    const medals = ["🥇 头号耿直人", "🥈 二号耿直人", "🥉 三号耿直人"];
+    // 排行榜：按金额取前 3
+    const top = [...donations].sort((a, b) => minorOf(b, "amount") - minorOf(a, "amount")).slice(0, 3);
+    const medals = [T("bowl.medal1"), T("bowl.medal2"), T("bowl.medal3")];
     const rank = $("#rank-list");
     rank.innerHTML = "";
     top.forEach((d, i) => {
       const el = document.createElement("div");
       el.className = "rank-item";
-      el.innerHTML = `<span>${medals[i]}</span><b>${escapeHtml(d.nickname)}</b><span style="color:var(--gold-deep);">¥${yuan(d.amountYuan)}</span>`;
+      el.innerHTML = `<span>${esc(medals[i])}</span><b>${esc(d.nickname)}</b><span style="color:var(--gold-deep);">${esc(amountText(d))}</span>`;
       rank.appendChild(el);
     });
-    if (!top.length) rank.innerHTML = '<p style="color:var(--muted); font-size:14px;">还没得排行，等第一个耿直人。</p>';
-  }
-
-  function escapeHtml(s) {
-    return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    if (!top.length) rank.innerHTML = `<p style="color:var(--muted); font-size:14px;">${esc(T("bowl.rankNone"))}</p>`;
   }
 
   /* ---------- 分享 ---------- */
   const shareMask = $("#share-mask");
   $("#btn-share").addEventListener("click", () => {
-    const url = `${location.origin}/${slug}`;
-    $("#share-url").textContent = url;
+    $("#share-url").textContent = `${location.origin}/${slug}`;
     $("#share-copied").classList.add("hidden");
     shareMask.classList.add("show");
   });
@@ -270,113 +313,124 @@
 
   /* ---------- 投一口 ---------- */
   const donateMask = $("#donate-mask");
-  const modal = $("#donate-modal");
   let done = false;
 
+  // 只展示碗主人实际填过的收款方式
+  function buildDonateTabs() {
+    const host = $("#donate-pay-tabs");
+    const methods = availableMethods();
+    host.innerHTML = methods
+      .map((m, i) => `<button type="button" class="pay-tab${i === 0 ? " active" : ""}" data-pay="${m}">${esc(payLabel(m))}</button>`)
+      .join("");
+    if (methods.length) payMethod = methods[0];
+    host.querySelectorAll(".pay-tab").forEach((tab) => {
+      tab.addEventListener("click", () => {
+        host.querySelectorAll(".pay-tab").forEach((t) => t.classList.remove("active"));
+        tab.classList.add("active");
+        payMethod = tab.dataset.pay;
+      });
+    });
+  }
+
   $("#btn-donate").addEventListener("click", () => {
-    if (bowl.status !== "active") {
-      toast("这个饭碗儿已经收摊了，投不得喽。");
-      return;
-    }
-    const anyPay = bowl.wechatQr || bowl.alipayQr || bowl.usdtQr || bowl.usdtAddress || bowl.usdtBep20Qr || bowl.usdtBep20Address || bowl.paypalQr || bowl.paypalLink;
-    if (!anyPay) {
-      toast("摆碗的兄弟伙还没留收款方式，先精神支持一哈。");
-      return;
-    }
+    if (bowl.status !== "active") { toast(T("bowl.closedToast")); return; }
+    if (!availableMethods().length) { toast(T("bowl.noPaymentToast")); return; }
     done = false;
+    buildDonateTabs();
     showStep("pay");
     donateMask.classList.add("show");
   });
 
-  $$("#donate-pay-tabs .pay-tab").forEach((tab) => {
-    tab.addEventListener("click", () => {
-      $$("#donate-pay-tabs .pay-tab").forEach((t) => t.classList.remove("active"));
-      tab.classList.add("active");
-      payMethod = tab.dataset.pay;
-    });
-  });
-
   $("#btn-next").addEventListener("click", () => {
-    // 先检查这个方式到底留没留
-    const has = payMethod === "wechat" ? bowl.wechatQr
-      : payMethod === "alipay" ? bowl.alipayQr
-      : payMethod === "usdt" ? (bowl.usdtQr || bowl.usdtAddress)
-      : payMethod === "usdt_bep20" ? (bowl.usdtBep20Qr || bowl.usdtBep20Address)
-      : (bowl.paypalQr || bowl.paypalLink);
-    if (!has) { toast("摆碗的莫得留这个收款方式。"); return; }
+    if (!availableMethods().includes(payMethod)) { toast(T("bowl.methodMissingToast")); return; }
     renderReportStep();
     showStep("report");
   });
 
-  let reportUsdtAddr = "";
+  let reportAddr = "";
+  let reportQr = "";
+
+  // 链接型收款方式 → 展示「打开收款页」按钮
+  const LINK_FIELD = {
+    paypal: "paypalLink", stripe: "stripeUrl", kofi: "kofiUrl",
+    buymeacoffee: "bmcUrl", revolut: "revolutUrl", wise: "wiseEmail",
+  };
 
   function renderReportStep() {
-    const isUsdt = payMethod === "usdt" || payMethod === "usdt_bep20";
-    const isPaypal = payMethod === "paypal";
-    const usdtAddr = payMethod === "usdt" ? bowl.usdtAddress : bowl.usdtBep20Address;
-    const usdtQr = payMethod === "usdt" ? bowl.usdtQr : bowl.usdtBep20Qr;
-    reportUsdtAddr = usdtAddr || "";
-    $("#r-pay-title").textContent = isUsdt ? "有币的兄弟伙，也可以整一口。" : isPaypal ? "PayPal 整一口，也阔以。" : "扫嘛，莫客气。";
-    $("#r-pay-lead").textContent = "钱直接甩给摆碗的兄弟伙，饭碗儿这里只记一笔。";
-    $("#r-pay-now").textContent = isUsdt ? "转完了回来报个到。" : isPaypal ? "转完了回来报个到。" : "扫完了记得回来报个到。";
-    // 有图显示图（微信/支付宝/USDT 都有图）；USDT 还可能有地址
-    $("#r-qr-box").classList.toggle("hidden", !((!isUsdt && !isPaypal && (payMethod === "wechat" ? bowl.wechatQr : bowl.alipayQr)) || (isUsdt && usdtQr) || (isPaypal && (bowl.paypalQr || bowl.paypalLink))));
-    $("#r-usdt-box").classList.toggle("hidden", !(isUsdt && usdtAddr));
-    $("#rd-txid-field").classList.toggle("hidden", !isUsdt);
+    const m = payMethod;
+    const link = LINK_FIELD[m] ? bowl[LINK_FIELD[m]] : "";
+    const isCrypto = ["btc", "eth", "sol", "usdt", "usdt_bep20", "usdt_erc20"].includes(m);
+    const qrField = { paypal: "paypalQr", usdt: "usdtQr", usdt_bep20: "usdtBep20Qr", usdt_erc20: "usdtErc20Qr", btc: "btcQr", wechat: "wechatQr", alipay: "alipayQr" }[m];
+    const addrField = { usdt: "usdtAddress", usdt_bep20: "usdtBep20Address", usdt_erc20: "usdtErc20Address", btc: "btcAddress", eth: "ethAddress", sol: "solAddress" }[m];
+    reportQr = qrField ? bowl[qrField] || "" : "";
+    reportAddr = addrField ? bowl[addrField] || "" : "";
 
-    if (isPaypal) {
-      $("#r-usdt-box").classList.add("hidden");
-      const qr = bowl.paypalQr;
-      const link = bowl.paypalLink || "";
-      let html = "";
-      if (qr) html += `<img src="${qr}" alt="PayPal收款码" /><p class="qr-tip" style="margin-top:10px;">扫起，扫码就是干。</p>`;
-      if (link) html += `<div class="addr-box" style="margin-top:12px;word-break:break-all;">${escapeHtml(link)}</div><button class="btn btn-sm" id="btn-copy-paypal">复制 PayPal 链接</button>`;
-      $("#r-qr-box").innerHTML = html || `<p class="qr-tip">莫得收款码图片，也莫得链接……</p>`;
-      const copyBtn = $("#btn-copy-paypal");
-      if (copyBtn) copyBtn.addEventListener("click", async () => { await copyText(link); toast("PayPal 链接已经抄到起了。"); });
-      return;
+    $("#rd-txid-field").classList.toggle("hidden", !isCrypto);
+
+    // 地址展示（链上币种）
+    const addrBox = $("#r-usdt-box");
+    const addrOnly = isCrypto && !reportQr && !!reportAddr;
+    addrBox.classList.toggle("hidden", !addrOnly);
+    if (addrOnly) {
+      $("#r-usdt-net").textContent =
+        m === "usdt" ? T("bowl.netTrc20")
+        : m === "usdt_bep20" ? T("bowl.netBep20")
+        : m === "usdt_erc20" ? T("bowl.netErc20")
+        : payLabel(m);
+      $("#r-usdt-addr").textContent = reportAddr;
     }
 
-    if (isUsdt) {
-      $("#r-usdt-net").textContent = payMethod === "usdt" ? "链：TRC20（T 开头）" : "链：BEP20（币安智能链）";
-      $("#r-usdt-addr").textContent = usdtAddr;
-      if (usdtQr) {
-        $("#r-qr-box").innerHTML = `<img src="${usdtQr}" alt="USDT收款码" /><p class="qr-tip" style="margin-top:10px;">扫起，扫码就是干。</p>`;
-      } else {
-        $("#r-qr-box").innerHTML = `<p class="qr-tip">只留了地址，莫得图，照着地址转就是。</p>`;
-      }
+    // 二维码展示
+    const qrBox = $("#r-qr-box");
+    if (reportQr) {
+      qrBox.classList.remove("hidden");
+      qrBox.innerHTML = `<img src="${esc(reportQr)}" alt="${esc(payLabel(m))}" /><p class="qr-tip" style="margin-top:10px;">${esc(T("bowl.scanTip"))}</p>`;
     } else {
-      const url = payMethod === "wechat" ? bowl.wechatQr : bowl.alipayQr;
-      $("#r-qr-box").innerHTML = url
-        ? `<img src="${url}" alt="${payMethod === "wechat" ? "微信" : "支付宝"}收款码" /><p class="qr-tip" style="margin-top:10px;">扫起，扫码就是干。</p>`
-        : `<p class="qr-tip">莫得收款码图片……</p>`;
+      qrBox.classList.add("hidden");
+      qrBox.innerHTML = "";
     }
+
+    // 链接型收款方式：给个按钮直接跳过去
+    const linkBox = $("#r-link-box");
+    const linkBtn = $("#r-pay-link");
+    const httpLink = link && /^https?:\/\//i.test(link) ? link : (link ? `mailto:${link}` : "");
+    if (httpLink) {
+      linkBox.classList.remove("hidden");
+      linkBtn.href = httpLink;
+    } else {
+      linkBox.classList.add("hidden");
+    }
+
+    // 都没有（只有邮箱之类）→ 把地址文本直接给出来
+    if (!reportQr && !httpLink && !reportAddr) {
+      qrBox.classList.remove("hidden");
+      qrBox.innerHTML = `<p class="qr-tip">${esc(T("bowl.noQrNoLink"))}</p>`;
+    }
+
+    $("#r-report-tip").innerHTML = T("donate.reportTip", { method: `<b>${esc(payLabel(m))}</b>` });
   }
 
   $("#btn-copy-usdt").addEventListener("click", async () => {
-    await copyText(reportUsdtAddr);
-    toast("地址已经抄到起了。");
+    await copyText(reportAddr);
+    toast(T("bowl.addrCopied"));
   });
 
   /* ---------- 报到（提交投喂） ---------- */
   let turnstileScriptReady = false;
 
-  // 脚本加载好了会自动喊这个（api.js?onload=），渲染时机就准了，莫管它加载好慢
   window.__turnstileOnload = () => {
     turnstileScriptReady = true;
     renderTurnstile();
   };
 
-  // 动态加载 Turnstile 脚本。带 ?onload= 回调，脚本自己会喊我们，渲染时机最准；
-  // 首次进入 challenges.cloudflare.com 可能加载慢/失败，加载失败就隔一会儿重试。
   function loadTurnstile(retries = 4) {
     return new Promise((resolve) => {
       if (turnstileScriptReady || typeof window.turnstile !== "undefined") return resolve(true);
       const s = document.createElement("script");
       s.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?onload=__turnstileOnload";
       s.async = true;
-      let done = false;
-      const finish = (ok) => { if (!done) { done = true; resolve(ok); } };
+      let finished = false;
+      const finish = (ok) => { if (!finished) { finished = true; resolve(ok); } };
       s.onload = () => finish(true);
       s.onerror = () => {
         if (retries > 0) setTimeout(() => loadTurnstile(retries - 1).then(finish), 800);
@@ -386,12 +440,12 @@
     });
   }
 
-  // sitekey 拿不到就多试几次：冷启动 /api/config 可能慢，拿不到就渲染不出验证
   async function fetchSiteKey() {
     for (let i = 0; i < 5 && !turnstileSiteKey; i++) {
       try {
         const cfg = await get("/api/config");
         turnstileSiteKey = cfg.turnstileSiteKey || "";
+        if (cfg.maxAmountYuan) maxAmount = cfg.maxAmountYuan;
       } catch { /* 下次再试 */ }
       if (!turnstileSiteKey) await new Promise((r) => setTimeout(r, 400));
     }
@@ -407,35 +461,21 @@
     });
   }
 
-  function initTurnstile() {
-    // 只提前加载脚本 + 拿 sitekey。这里不渲染：
-    // Turnstile 容器藏在"报到"弹窗里（display:none），隐藏容器渲染会白屏，
-    // 等进到 report 步（showStep）容器可见了再渲染。
-    loadTurnstile();
-    fetchSiteKey();
-  }
-  initTurnstile();
+  loadTurnstile();
+  fetchSiteKey();
 
-  // 提交前确保 token 已生成：配置/脚本没就绪就补，再主动 execute() 强制走一次。
   async function ensureTurnstileToken(timeout = 8000) {
     if (turnstileToken) return turnstileToken;
     await fetchSiteKey();
     await loadTurnstile();
     renderTurnstile();
     if (turnstileToken) return turnstileToken;
-    try {
-      if (turnstileWidget) window.turnstile.execute(turnstileWidget);
-    } catch { }
+    try { if (turnstileWidget) window.turnstile.execute(turnstileWidget); } catch { }
     return new Promise((resolve) => {
       const t0 = Date.now();
       const iv = setInterval(() => {
-        if (turnstileToken) {
-          clearInterval(iv);
-          resolve(turnstileToken);
-        } else if (Date.now() - t0 >= timeout) {
-          clearInterval(iv);
-          resolve("");
-        }
+        if (turnstileToken) { clearInterval(iv); resolve(turnstileToken); }
+        else if (Date.now() - t0 >= timeout) { clearInterval(iv); resolve(""); }
       }, 150);
     });
   }
@@ -448,16 +488,16 @@
     const txid = $("#rd-txid").value.trim();
     const isAnonymous = $("#rd-anon").checked;
 
-    if (!amount || Number(amount) <= 0) { toast("金额还是要填一个嘛，多少随你。"); return; }
-    if (Number(amount) > 1000) { toast("一口顶天 1000 块，莫把别个吓到了。"); return; }
-    if (!isAnonymous && !nickname) { toast("叫啥子嘛，留个名字，或者勾莫留名字。"); return; }
+    if (!amount || Number(amount) <= 0) { toast(T("bowl.amountRequired")); return; }
+    if (Number(amount) > maxAmount) { toast(T("bowl.amountTooBig", { max: maxAmount })); return; }
+    if (!isAnonymous && !nickname) { toast(T("bowl.nameRequired")); return; }
 
     btn.disabled = true;
-    btn.textContent = "报到中……";
+    const originalLabel = T("donate.submit");
+    btn.textContent = T("bowl.submitting");
     try {
       const data = await post("/api/donation", {
-        slug,
-        nickname,
+        slug, nickname,
         amount: Number(amount),
         message,
         paymentMethod: payMethod,
@@ -466,22 +506,21 @@
         turnstileToken: (await ensureTurnstileToken()) || undefined,
       });
       localStorage.setItem(`donation_delete_${data.id}`, data.deleteToken);
-      // 成功动画：米粒掉进饭碗 + 碗轻轻晃一哈
       await playDing();
-      $("#done-title").textContent = "🍚 这口饭，我给你记到起了。";
-      $("#done-sub").textContent = "收到，记到饭碗儿头了。等摆碗的兄弟伙点个“放行”就显示出来。";
+      $("#done-title").textContent = T("bowl.successTitleDone");
+      // 免放行模式直接上墙；审核模式则要等碗主人放行
+      $("#done-sub").textContent = data.autoApproved ? T("bowl.successSubAuto") : T("bowl.successSubPending");
       showStep("done");
-      // 刷新数据（一次请求）
       refresh();
     } catch (e) {
-      toast(e.message || "没报到起，再整一哈。");
+      toast(e.message || T("bowl.actionFailedToast"));
     } finally {
       btn.disabled = false;
-      btn.textContent = "我已经投了，回来报个到";
+      btn.textContent = originalLabel;
     }
   });
 
-  /* ---------- 投喂成功动画：米粒 + 叮 ---------- */
+  /* ---------- 投喂成功动画 ---------- */
   function playDing() {
     return new Promise((resolve) => {
       try {
@@ -489,7 +528,7 @@
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
         osc.type = "sine";
-        osc.frequency.setValueAtTime(1568, ctx.currentTime); // G6
+        osc.frequency.setValueAtTime(1568, ctx.currentTime);
         osc.frequency.exponentialRampToValueAtTime(2093, ctx.currentTime + 0.18);
         gain.gain.setValueAtTime(0.0001, ctx.currentTime);
         gain.gain.exponentialRampToValueAtTime(0.28, ctx.currentTime + 0.02);
@@ -497,14 +536,13 @@
         osc.connect(gain).connect(ctx.destination);
         osc.start();
         osc.stop(ctx.currentTime + 0.55);
-      } catch { /* 没声音就没声音嘛 */ }
+      } catch { /* 没声音就没声音 */ }
 
       $$("#ding-scene .rice").forEach((r, i) => {
         r.classList.remove("drop");
         void r.offsetWidth;
         setTimeout(() => r.classList.add("drop"), i * 140);
       });
-      // 米粒落到碗头，碗轻轻晃一下
       setTimeout(() => $("#ding-scene").classList.add("wobble"), 320);
       setTimeout(resolve, 850);
     });
@@ -524,11 +562,8 @@
     ["pay", "report", "done"].forEach((s) => {
       $(`#step-${s}`).classList.toggle("hidden", s !== step);
     });
-    // 走到"看收款方式+报到"这一步，Turnstile 容器才可见。
-    // 脚本和 sitekey 早就绪的话，这里一渲染就出验证（非交互模式自动过）。
     if (step === "report") {
       renderTurnstile();
-      // 脚本万一还没加载完（首次进网络慢），轮询补渲染，莫让用户卡在报到这步
       const t0 = Date.now();
       const iv = setInterval(() => {
         renderTurnstile();
@@ -545,12 +580,16 @@
     });
   });
 
-  // 关闭后若投喂成功过，顺手刷新列表展示最新记录
   donateMask.addEventListener("click", (e) => {
     if (e.target === donateMask || e.target.dataset.close !== undefined) {
       if (done) refresh();
     }
   });
 
-  load();
+  /* ---------- 切语言：重画动态部分 ---------- */
+  document.addEventListener("i18n:change", () => {
+    if (bowl) render();
+  });
+
+  I18N.onReady(() => load());
 })();

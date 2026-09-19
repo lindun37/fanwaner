@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>饭碗儿 —— 没得饭吃啷个办？先把饭碗儿摆出来嘛。</title>
-  <meta name="description" content="互联网人的在线饭碗儿。摆个饭碗儿，等个耿直人投一口。" />
+  <title>Fanwaner — Broke? Put out a rice bowl.</title>
+  <meta name="description" content="An open-source online rice bowl for people on the internet. Put out a bowl, wait for someone kind to chip in." />
   <meta property="og:type" content="website" />
   <meta property="og:title" content="__OG_TITLE__" />
   <meta property="og:description" content="__OG_DESC__" />
@@ -12,51 +12,54 @@
   <meta property="og:image:width" content="1200" />
   <meta property="og:image:height" content="630" />
   <meta property="og:url" content="__OG_URL__" />
+  <meta property="og:locale" content="en_US" />
+  <meta property="og:locale:alternate" content="zh_CN" />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <link rel="stylesheet" href="/css/style.css" />
 </head>
 <body>
   <header class="site-header">
     <a class="brand" href="/">
-      <img src="/img/logo.svg" alt="饭碗儿 Logo" />
-      <span>饭碗儿<small>没得饭吃啷个办？先把饭碗儿摆出来嘛。</small></span>
+      <img src="/img/logo.svg" alt="Fanwaner Logo" data-i18n-aria="brand.name" />
+      <span><span data-i18n="brand.name"></span><small data-i18n="brand.tagline"></small></span>
     </a>
     <nav class="nav">
-      <a class="btn btn-sm btn-ghost" href="/#bowls">👀 看哈哪个还在讨生活</a>
-      <a class="btn btn-sm btn-primary" href="/create.html">🍚 摆个饭碗儿</a>
+      <span class="lang-switch" data-lang-switch></span>
+      <a class="btn btn-sm btn-ghost" href="/#bowls" data-i18n="nav.browse"></a>
+      <a class="btn btn-sm btn-primary" href="/create.html" data-i18n="nav.create"></a>
     </nav>
   </header>
 
   <main>
     <section class="hero">
-      <img class="hero-bowl anim-settle" src="/img/bowl.svg" alt="一只摆起的饭碗" />
-      <h1>没得饭吃啷个办？<br /><em>先把饭碗儿摆出来嘛。</em></h1>
-      <p class="sub">互联网这么大，总有个耿直人愿意请你吃口饭嘛。</p>
+      <img class="hero-bowl anim-settle" src="/img/bowl.svg" alt="A bowl put out on the table" />
+      <h1 data-i18n-html="index.heroTitle"></h1>
+      <p class="sub" data-i18n="index.heroSub"></p>
       <div class="hero-actions">
-        <a class="btn btn-lg btn-primary" href="/create.html">🍚 摆个饭碗儿</a>
-        <a class="btn btn-lg" href="#bowls">👀 看哈哪个还在讨生活</a>
+        <a class="btn btn-lg btn-primary" href="/create.html" data-i18n="nav.create"></a>
+        <a class="btn btn-lg" href="#bowls" data-i18n="nav.browse"></a>
       </div>
       <p class="slogan" id="slogan"></p>
     </section>
 
     <section id="bowls">
-      <h2 class="section-title">今天哪个还没吃饭？<small id="bowl-count"></small></h2>
+      <h2 class="section-title"><span data-i18n="index.listTitle"></span> <small id="bowl-count"></small></h2>
       <div id="bowl-list" class="bowl-grid"></div>
       <div id="empty-box" class="empty hidden">
-        <img src="/img/bowl.svg" alt="空碗" />
-        <h2>还没得哪个来喂……</h2>
-        <p>莫慌，饭碗儿都摆起了，总会有人路过。</p>
-        <a class="btn btn-primary" href="/create.html">🍚 我先摆一个</a>
+        <img src="/img/bowl.svg" alt="Empty bowl" />
+        <h2 data-i18n="index.emptyTitle"></h2>
+        <p data-i18n="index.emptySub"></p>
+        <a class="btn btn-primary" href="/create.html" data-i18n="index.emptyCta"></a>
       </div>
       <div id="load-more" class="hidden" style="text-align:center; margin-top:26px;">
-        <button class="btn btn-gold" id="load-more-btn">再看一哈还有莫得</button>
+        <button class="btn btn-gold" id="load-more-btn" data-i18n="index.loadMore"></button>
       </div>
     </section>
 
     <section id="done-bowls" style="margin-top:56px;">
       <details class="done-box">
         <summary>
-          <span>🍚 吃饱收摊的碗</span>
+          <span data-i18n="index.doneSection"></span>
           <small id="done-count" class="hint"></small>
           <span class="caret">▾</span>
         </summary>
@@ -66,11 +69,15 @@
   </main>
 
   <footer class="site-footer">
-    <p>🍚 饭碗儿 · 问斗是先吃饭 | <a href="https://github.com/cunzhangcrypto/fanwan" target="_blank" rel="noopener">GitHub 开源（MIT）</a></p>
-    <p>饭钱不经过我们，直接甩给摆碗的兄弟伙。</p>
-    <p>我们只负责记到：哪个兄弟伙，今天有人投过饭。</p>
+    <p>
+      <span data-i18n="brand.footerTagline"></span> |
+      <a href="https://github.com/cunzhangcrypto/fanwan" target="_blank" rel="noopener">GitHub (MIT)</a>
+    </p>
+    <p data-i18n="brand.footerNote1"></p>
+    <p data-i18n="brand.footerNote2"></p>
   </footer>
 
+  <script src="/js/i18n.js"></script>
   <script src="/js/api.js"></script>
   <script src="/js/index.js"></script>
 </body>

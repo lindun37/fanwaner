@@ -21,11 +21,22 @@ import { verifyTurnstile } from "../lib/turnstile.js";
 import { getIp, computeDailyKey } from "../lib/ip.js";
 import { randomSlug, randomToken } from "../lib/slug.js";
 import { getBowlBySlug, formatBowl, formatDonation, isUniqueConflict } from "../lib/db.js";
+import { detectLocale, t } from "../lib/i18n.js";
+import { normalizeCurrency, CURRENCY_CODES, DEFAULT_CURRENCY } from "../lib/currency.js";
+import { PAYMENT_METHODS } from "../lib/validate.js";
+import { autoApprove as autoApproveMode } from "./donations.js";
 
 export async function handleConfig(env) {
   return ok({
     turnstileSiteKey: env.TURNSTILE_SITE_KEY || "",
     maxAmountYuan: env.MAX_AMOUNT_YUAN || LIMITS.amountMaxYuan,
+    // i18n：给前端填充币种下拉与支付方式
+    defaultLocale: env.DEFAULT_LOCALE || "en",
+    defaultCurrency: env.DEFAULT_CURRENCY || DEFAULT_CURRENCY,
+    currencies: CURRENCY_CODES,
+    paymentMethods: PAYMENT_METHODS,
+    // 免放行直接上墙
+    autoApprove: autoApproveMode(env),
   });
 }
 
@@ -321,9 +332,10 @@ export async function createBowl(request, env) {
 
 // GET /api/bowl/:slug
 export async function getBowl(request, env, slug) {
-  if (!isValidSlug(slug)) return fail(ERR.NOT_FOUND, "这口饭好像没摆在这儿。", 404);
+  const locale = detectLocale(request, env);
+  if (!isValidSlug(slug)) return fail(ERR.NOT_FOUND, t(locale, "err.bowlNotFound"), 404);
   const bowl = await getBowlBySlug(env.DB, slug);
-  if (!bowl) return fail(ERR.NOT_FOUND, "这口饭好像没摆在这儿。", 404);
+  if (!bowl) return fail(ERR.NOT_FOUND, t(locale, "err.bowlNotFound"), 404);
 
   // 懒更新状态
   let status = bowl.status;
@@ -350,7 +362,7 @@ export async function getBowl(request, env, slug) {
 
   return ok({
     bowl: formatBowl(bowl),
-    donations: donations.results.map(formatDonation),
+    donations: donations.results.map((d) => formatDonation(d, locale)),
   });
 }
 
@@ -478,13 +490,15 @@ export async function updateBowl(request, env, slug) {
 // —— 摆碗的本人（edit_token）查看并放行自家饭碗的投喂 ——
 
 // GET /api/bowl/:slug/pending?token=xxx —— 自家的待放行投喂
+// 自动上墙模式下没有 pending，改为返回「最近已上墙」的投喂，碗主人仍可拒掉不实的那笔
 export async function getPendingDonations(request, env, slug) {
-  if (!isValidSlug(slug)) return fail(ERR.NOT_FOUND, "这口饭好像没摆在这儿。", 404);
+  const locale = detectLocale(request, env);
+  if (!isValidSlug(slug)) return fail(ERR.NOT_FOUND, t(locale, "err.bowlNotFound"), 404);
   const bowl = await getBowlBySlug(env.DB, slug);
-  if (!bowl) return fail(ERR.NOT_FOUND, "这口饭好像没摆在这儿。", 404);
+  if (!bowl) return fail(ERR.NOT_FOUND, t(locale, "err.bowlNotFound"), 404);
   const token = new URL(request.url).searchParams.get("token") || "";
   if (!token || token !== bowl.edit_token) {
-    return fail(ERR.UNAUTHORIZED, "这个饭碗儿不是你的哈。", 401);
+    return fail(ERR.UNAUTHORIZED, t(locale, "err.notYourBowl"), 401);
   }
   const rows = await env.DB.prepare(
     `SELECT * FROM donations WHERE bowl_id = ? AND status = 'pending'
@@ -494,32 +508,41 @@ export async function getPendingDonations(request, env, slug) {
     `SELECT * FROM donations WHERE bowl_id = ? AND status = 'rejected'
      ORDER BY created_at DESC LIMIT 10`
   ).bind(bowl.id).all();
+  // 已自动上墙的最近记录（碗主人可在这里把它们拒掉）
+  const autoApproved = await env.DB.prepare(
+    `SELECT * FROM donations WHERE bowl_id = ? AND status = 'approved'
+     ORDER BY created_at DESC LIMIT 20`
+  ).bind(bowl.id).all();
   return ok({
-    pending: rows.results.map(formatDonation),
-    rejected: rejected.results.map(formatDonation),
+    pending: rows.results.map((d) => formatDonation(d, locale)),
+    rejected: rejected.results.map((d) => formatDonation(d, locale)),
+    approved: autoApproved.results.map((d) => formatDonation(d, locale)),
+    autoApprove: autoApproveMode(env),
   });
 }
 
 // 校验 edit_token + 这笔投喂确实是投到自家饭碗的
-async function ownDonation(env, bowl, body) {
+async function ownDonation(env, bowl, body, locale) {
   const id = Number(body?.id);
-  if (!Number.isInteger(id) || id <= 0) return { err: fail(ERR.VALIDATION_ERROR, "id 没传对头。") };
+  if (!Number.isInteger(id) || id <= 0) return { err: fail(ERR.VALIDATION_ERROR, t(locale, "err.badDonationId")) };
   if (!body?.editToken || body.editToken !== bowl.edit_token) {
-    return { err: fail(ERR.UNAUTHORIZED, "这个饭碗儿不是你的哈。", 401) };
+    return { err: fail(ERR.UNAUTHORIZED, t(locale, "err.notYourBowl"), 401) };
   }
   const row = await env.DB.prepare("SELECT * FROM donations WHERE id = ?").bind(id).first();
   if (!row || row.bowl_id !== bowl.id) {
-    return { err: fail(ERR.NOT_FOUND, "这笔投喂没找到。", 404) };
+    return { err: fail(ERR.NOT_FOUND, t(locale, "err.donationNotFound"), 404) };
   }
   return { row };
 }
 
 // POST /api/bowl/:slug/approve {id, editToken} —— 放他过（幂等：只处理 pending）
+// 自动上墙模式下投喂已经是 approved，这里会返回 no-op，不会重复累加金额。
 export async function approveOwnDonation(request, env, slug) {
-  if (!isValidSlug(slug)) return fail(ERR.NOT_FOUND, "这口饭好像没摆在这儿。", 404);
+  const locale = detectLocale(request, env);
+  if (!isValidSlug(slug)) return fail(ERR.NOT_FOUND, t(locale, "err.bowlNotFound"), 404);
   const bowl = await getBowlBySlug(env.DB, slug);
-  if (!bowl) return fail(ERR.NOT_FOUND, "这口饭好像没摆在这儿。", 404);
-  const { row, err } = await ownDonation(env, bowl, await readJson(request));
+  if (!bowl) return fail(ERR.NOT_FOUND, t(locale, "err.bowlNotFound"), 404);
+  const { row, err } = await ownDonation(env, bowl, await readJson(request), locale);
   if (err) return err;
 
   const res = await env.DB.prepare(
@@ -533,19 +556,32 @@ export async function approveOwnDonation(request, env, slug) {
        WHERE id = ?`
     ).bind(row.amount_cents, bowl.id).run();
   }
-  return ok({ id: row.id });
+  return ok({ id: row.id, changed: res.meta.changes > 0 });
 }
 
 // POST /api/bowl/:slug/reject {id, editToken} —— 这个不行
+// 自动上墙模式下，被拒的往往是已经计过账的投喂，所以要把金额扣回去。
 export async function rejectOwnDonation(request, env, slug) {
-  if (!isValidSlug(slug)) return fail(ERR.NOT_FOUND, "这口饭好像没摆在这儿。", 404);
+  const locale = detectLocale(request, env);
+  if (!isValidSlug(slug)) return fail(ERR.NOT_FOUND, t(locale, "err.bowlNotFound"), 404);
   const bowl = await getBowlBySlug(env.DB, slug);
-  if (!bowl) return fail(ERR.NOT_FOUND, "这口饭好像没摆在这儿。", 404);
-  const { row, err } = await ownDonation(env, bowl, await readJson(request));
+  if (!bowl) return fail(ERR.NOT_FOUND, t(locale, "err.bowlNotFound"), 404);
+  const { row, err } = await ownDonation(env, bowl, await readJson(request), locale);
   if (err) return err;
 
-  await env.DB.prepare(
-    `UPDATE donations SET status='rejected' WHERE id=? AND status='pending'`
-  ).bind(row.id).run();
-  return ok({ id: row.id });
+  const wasApproved = row.status === "approved";
+  const stmts = [
+    env.DB.prepare(
+      `UPDATE donations SET status='rejected' WHERE id=? AND status IN ('pending','approved')`
+    ).bind(row.id),
+  ];
+  // 之前已经计过账的，拒掉的时候把金额扣回去
+  if (wasApproved) {
+    stmts.push(
+      env.DB.prepare("UPDATE bowls SET current_cents = MAX(0, current_cents - ?) WHERE id = ?")
+        .bind(row.amount_cents, bowl.id)
+    );
+  }
+  await env.DB.batch(stmts);
+  return ok({ id: row.id, refunded: wasApproved });
 }

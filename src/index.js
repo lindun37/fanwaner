@@ -8,6 +8,7 @@ import { pendingDonations, getBowlForAdmin, approveDonation, rejectDonation, del
 import { handleOg } from "./api/og.js";
 import { serveBowHtml, serveStatic } from "./assets.js";
 import { RESERVED_SLUGS } from "./lib/validate.js";
+import { detectLocale, t, withLocaleCookie } from "./lib/i18n.js";
 
 // 自定义后缀饭碗儿：/cunzhang
 // 注意：不要用 SLUG_RE.source 拼（它自带 ^ 锚点，拼进去就成了"必须从头匹配"，永远撞不上）
@@ -18,11 +19,12 @@ export default {
     const url = new URL(request.url);
     const path = url.pathname;
     const method = request.method;
+    const locale = detectLocale(request, env);
 
     try {
       // 公开配置
       if (method === "GET" && path === "/api/config") {
-        return handleConfig(env);
+        return withLocaleCookie(await handleConfig(env), locale);
       }
 
       // 饭碗儿 API
@@ -40,7 +42,7 @@ export default {
         const slug = rest.startsWith("/") ? rest.slice(1) : "";
         if (method === "GET" && slug) return getBowl(request, env, slug);
         if (method === "PUT" && slug) return updateBowl(request, env, slug);
-        return fail(ERR.NOT_FOUND, "没得这个接口。", 404);
+        return fail(ERR.NOT_FOUND, t(locale, "err.bowlNotFound"), 404);
       }
 
       // 投喂 API
@@ -48,7 +50,7 @@ export default {
         if (method === "POST" && path === "/api/donation") return createDonation(request, env, ctx);
         const m = path.match(/^\/api\/donation\/(\d+)$/);
         if (method === "DELETE" && m) return deleteDonation(request, env, Number(m[1]));
-        return fail(ERR.NOT_FOUND, "没得这个接口。", 404);
+        return fail(ERR.NOT_FOUND, t(locale, "err.bowlNotFound"), 404);
       }
 
       // 图片上传
@@ -64,7 +66,7 @@ export default {
         if (method === "POST" && path === "/api/admin/approve") return approveDonation(request, env);
         if (method === "POST" && path === "/api/admin/reject") return rejectDonation(request, env);
         if (method === "POST" && path === "/api/admin/delete") return deleteItem(request, env);
-        return fail(ERR.NOT_FOUND, "没得这个接口。", 404);
+        return fail(ERR.NOT_FOUND, t(locale, "err.unauthorized"), 404);
       }
 
       // R2 图片读取
@@ -94,7 +96,7 @@ export default {
       return serveStatic(env, request);
     } catch (err) {
       console.error("碗儿翻了：", err);
-      return fail(ERR.SERVER_ERROR, "哎呀，饭碗没接住。网络这哈有点恼火，再整一哈嘛。", 500);
+      return fail(ERR.SERVER_ERROR, t(locale, "err.serverError"), 500);
     }
   },
 };
@@ -102,7 +104,7 @@ export default {
 async function serveImage(env, key) {
   const obj = await env.BUCKET.get(key).catch(() => null);
   if (!obj) {
-    return new Response("这口饭（图）没找到。", { status: 404 });
+    return new Response("Image not found.", { status: 404 });
   }
   const headers = new Headers();
   headers.set("Content-Type", obj.httpMetadata?.contentType || "application/octet-stream");

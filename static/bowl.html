@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -18,12 +18,13 @@
 <body>
   <header class="site-header">
     <a class="brand" href="/">
-      <img src="/img/logo.svg" alt="饭碗儿 Logo" />
-      <span>饭碗儿<small>没得饭吃啷个办？先把饭碗儿摆出来嘛。</small></span>
+      <img src="/img/logo.svg" alt="Fanwaner Logo" data-i18n-aria="brand.name" />
+      <span><span data-i18n="brand.name"></span><small data-i18n="brand.tagline"></small></span>
     </a>
     <nav class="nav">
-      <a class="btn btn-sm btn-ghost" href="/#bowls">👀 看哈哪个还在讨生活</a>
-      <a class="btn btn-sm btn-primary" href="/create.html">🍚 摆个饭碗儿</a>
+      <span class="lang-switch" data-lang-switch></span>
+      <a class="btn btn-sm btn-ghost" href="/#bowls" data-i18n="nav.browse"></a>
+      <a class="btn btn-sm btn-primary" href="/create.html" data-i18n="nav.create"></a>
     </nav>
   </header>
 
@@ -34,7 +35,7 @@
       <div id="detail" class="hidden">
         <div class="detail-card">
           <div class="detail-top">
-            <img class="detail-bowl-img anim-settle" src="/img/bowl.svg" alt="饭碗儿" />
+            <img class="detail-bowl-img anim-settle" src="/img/bowl.svg" alt="Rice bowl" />
             <div>
               <h1 class="detail-title" id="d-title"></h1>
               <div class="detail-amount"><span class="amt-state" id="d-state"></span> · <b id="d-current"></b> / <span id="d-target"></span></div>
@@ -58,32 +59,38 @@
           <div class="kv" id="d-kv"></div>
 
           <div class="detail-actions">
-            <button class="btn btn-lg btn-primary" id="btn-donate">🍚 投一口</button>
-            <button class="btn btn-lg btn-gold" id="btn-share">📣 喊兄弟伙来瞅一哈</button>
-            <button class="btn btn-lg btn-ghost hidden" id="btn-edit">✏️ 改一哈</button>
-            <button class="btn btn-lg btn-ghost hidden" id="btn-manage-link">🔑 复制管理链接</button>
+            <button class="btn btn-lg btn-primary" id="btn-donate" data-i18n="bowl.btnDonate"></button>
+            <button class="btn btn-lg btn-gold" id="btn-share" data-i18n="bowl.btnShare"></button>
+            <button class="btn btn-lg btn-ghost hidden" id="btn-edit" data-i18n="bowl.btnEdit"></button>
+            <button class="btn btn-lg btn-ghost hidden" id="btn-manage-link" data-i18n="bowl.btnManageLink"></button>
           </div>
         </div>
 
         <section class="records">
           <div id="pending-section" class="hidden" style="margin-bottom:36px;">
-            <h2 class="section-title">🗳 有人端饭过来了，等你放行 <small>放他过了才显示、才记账</small></h2>
+            <h2 class="section-title">
+              <span id="pending-title" data-i18n="bowl.pendingTitle"></span>
+              <small id="pending-hint" data-i18n="bowl.pendingHint"></small>
+            </h2>
             <div id="pending-list"></div>
 
             <div id="rejected-section" class="hidden" style="margin-top:24px;">
-              <h2 class="section-title" style="font-size:20px;">🙅 遭你否了的 <small>嘴上说投了，其实没真转钱那种，记一哈免得再上当</small></h2>
+              <h2 class="section-title" style="font-size:20px;">
+                <span data-i18n="bowl.rejectedTitle"></span>
+                <small data-i18n="bowl.rejectedHint"></small>
+              </h2>
               <div id="rejected-list"></div>
             </div>
           </div>
 
-          <h2 class="section-title">看看哪些兄弟伙投过一口 <small id="r-count"></small></h2>
+          <h2 class="section-title"><span data-i18n="bowl.recordsTitle"></span> <small id="r-count"></small></h2>
           <div id="record-list" class="record-list"></div>
           <div id="record-empty" class="empty hidden" style="padding:36px 20px;">
-            <h2 style="font-size:20px;">还没得人投过……</h2>
-            <p style="margin-bottom:0;">碗摆起了，就看哪个耿直人先来。你要是觉得可以，就来一口嘛。</p>
+            <h2 style="font-size:20px;" data-i18n="bowl.recordsEmptyTitle"></h2>
+            <p style="margin-bottom:0;" data-i18n="bowl.recordsEmptySub"></p>
           </div>
 
-          <h2 class="section-title" style="margin-top:40px;">哪些兄弟伙最耿直？</h2>
+          <h2 class="section-title" style="margin-top:40px;" data-i18n="bowl.rankTitle"></h2>
           <div id="rank-list" class="rank-list"></div>
         </section>
       </div>
@@ -91,105 +98,98 @@
   </main>
 
   <footer class="site-footer">
-    <p>🍚 饭碗儿 · 问斗是先吃饭</p>
-    <p>饭钱不经过我们，直接甩给摆碗的兄弟伙。</p>
-    <p>我们只负责记到：哪个兄弟伙，今天有人投过饭。</p>
+    <p data-i18n="brand.footerTagline"></p>
+    <p data-i18n="brand.footerNote1"></p>
+    <p data-i18n="brand.footerNote2"></p>
   </footer>
 
-  <!-- 投一口弹窗 -->
   <div class="modal-mask" id="donate-mask">
     <div class="modal" id="donate-modal">
-      <button class="close" data-close>×</button>
+      <button class="close" data-close aria-label="Close">×</button>
 
-      <!-- 第一步：选啷个投 -->
       <div id="step-pay">
-        <h3>来嘛，投一口。</h3>
-        <p class="lead">多少随你，主要是这份心意。</p>
-        <div class="pay-tabs" id="donate-pay-tabs">
-          <button type="button" class="pay-tab active" data-pay="wechat">微信</button>
-          <button type="button" class="pay-tab" data-pay="alipay">支付宝</button>
-          <button type="button" class="pay-tab" data-pay="usdt">USDT(TRC20)</button>
-          <button type="button" class="pay-tab" data-pay="usdt_bep20">USDT(BEP20)</button>
-          <button type="button" class="pay-tab" data-pay="paypal">PayPal</button>
-        </div>
-        <button class="btn btn-lg btn-primary" id="btn-next" style="width:100%;">下一步，看啷个投 →</button>
+        <h3 data-i18n="donate.stepPayTitle"></h3>
+        <p class="lead" data-i18n="donate.stepPayLead"></p>
+        <div class="pay-tabs" id="donate-pay-tabs"></div>
+        <button class="btn btn-lg btn-primary" id="btn-next" style="width:100%;" data-i18n="donate.btnNext"></button>
       </div>
 
-      <!-- 第二步：看收款方式 + 报到 -->
       <div id="step-report" class="hidden">
-        <h3 id="r-pay-title">扫嘛，莫客气。</h3>
-        <p class="lead" id="r-pay-lead">钱直接甩给摆碗的兄弟伙，饭碗儿这里只记一笔。</p>
+        <h3 id="r-pay-title" data-i18n="donate.stepReportTitle"></h3>
+        <p class="lead" id="r-pay-lead" data-i18n="donate.stepReportLead"></p>
 
         <div id="r-qr-box" class="qr-box"></div>
         <div id="r-usdt-box" class="hidden">
           <div class="addr-label" id="r-usdt-net" style="font-size:13px; color:var(--red); font-weight:600; margin-top:6px;"></div>
           <div class="addr-box" id="r-usdt-addr"></div>
-          <button class="btn btn-sm" id="btn-copy-usdt">复制地址</button>
-          <div class="alert alert-red" style="margin-top:12px;">转之前看清楚哈，地址错了，饭碗儿也救不回来。</div>
+          <button class="btn btn-sm" id="btn-copy-usdt" data-i18n="donate.copyAddress"></button>
+          <div class="alert alert-red" style="margin-top:12px;" data-i18n="pay.addrWarn"></div>
+        </div>
+        <div id="r-link-box" class="hidden">
+          <a class="btn btn-gold" id="r-pay-link" target="_blank" rel="noopener noreferrer" style="width:100%;" href="#" data-i18n="donate.openPay"></a>
         </div>
 
-        <p class="qr-tip" style="margin-top:12px;">弄完了记得回来报个到，给摆碗的兄弟伙记一笔。<b id="r-pay-now"></b></p>
+        <p class="qr-tip" style="margin-top:12px;" id="r-report-tip"></p>
 
         <hr style="border:none; border-top:1.5px dashed var(--line); margin:18px 0;" />
         <div id="report-form">
           <div class="field">
-            <label for="rd-nickname">叫啥子嘛？</label>
-            <input type="text" id="rd-nickname" maxlength="30" placeholder="叫啥子嘛？" />
+            <label for="rd-nickname" data-i18n="donate.fieldNickname"></label>
+            <input type="text" id="rd-nickname" maxlength="30" data-i18n-ph="donate.fieldNicknamePh" />
           </div>
           <div class="field">
-            <label for="rd-amount">投一口，多少随你。<span class="req">*</span></label>
-            <input type="number" id="rd-amount" min="1" max="1000" step="0.01" placeholder="投一口，多少随你。" />
+            <label for="rd-amount"><span data-i18n="donate.fieldAmount"></span><span class="req">*</span></label>
+            <input type="number" id="rd-amount" min="1" step="0.01" data-i18n-ph="donate.fieldAmountPh" />
           </div>
           <div class="field">
-            <label for="rd-message">留言</label>
-            <input type="text" id="rd-message" maxlength="200" placeholder="说两句嘛，给他加点油。" />
+            <label for="rd-message" data-i18n="donate.fieldMessage"></label>
+            <input type="text" id="rd-message" maxlength="200" data-i18n-ph="donate.fieldMessagePh" />
           </div>
           <div class="field hidden" id="rd-txid-field">
-            <label for="rd-txid">TXID（交易哈希）<span class="hint">有就甩过来，没有也不强求。</span></label>
-            <input type="text" id="rd-txid" maxlength="128" placeholder="有交易哈希就甩过来。" />
+            <label for="rd-txid"><span data-i18n="donate.fieldTxid"></span> <span class="hint" data-i18n="donate.fieldTxidHint"></span></label>
+            <input type="text" id="rd-txid" maxlength="128" data-i18n-ph="donate.fieldTxidPh" />
           </div>
           <div class="field">
             <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
               <input type="checkbox" id="rd-anon" style="width:18px;height:18px;" />
-              莫留名字
+              <span data-i18n="donate.fieldAnon"></span>
             </label>
-            <span class="hint">做好事不留名，巴适。</span>
+            <span class="hint" data-i18n="donate.fieldAnonHint"></span>
           </div>
           <div class="turnstile-wrap" id="turnstile-wrap"></div>
-          <button class="btn btn-lg btn-primary" id="btn-submit-donation" style="width:100%;">我已经投了，回来报个到</button>
+          <button class="btn btn-lg btn-primary" id="btn-submit-donation" style="width:100%;" data-i18n="donate.submit"></button>
         </div>
       </div>
 
-      <!-- 第三步：收到 -->
       <div id="step-done" class="hidden" style="text-align:center;">
         <div class="ding-scene" id="ding-scene">
           <div class="rice"></div>
           <div class="rice"></div>
           <div class="rice"></div>
-          <img class="ding-bowl" src="/img/bowl.svg" alt="饭碗" />
+          <img class="ding-bowl" src="/img/bowl.svg" alt="Rice bowl" />
         </div>
         <p class="ding-text" id="done-title"></p>
         <p style="color:var(--ink-soft);" id="done-sub"></p>
         <div class="btn-row" style="justify-content:center; margin-top:18px;">
-          <button class="btn btn-gold" data-close>要得，收工</button>
+          <button class="btn btn-gold" data-close data-i18n="donate.doneClose"></button>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- 分享弹窗 -->
   <div class="modal-mask" id="share-mask">
     <div class="modal" style="text-align:center;">
-      <button class="close" data-close>×</button>
-      <h3>把饭碗儿甩出去</h3>
-      <p class="lead">喊兄弟伙来瞅一哈，说不定就有个耿直人。</p>
+      <button class="close" data-close aria-label="Close">×</button>
+      <h3 data-i18n="share.title"></h3>
+      <p class="lead" data-i18n="share.lead"></p>
       <div class="alert" style="font-size:13px; word-break:break-all;" id="share-url"></div>
-      <button class="btn btn-gold" id="btn-copy-share" style="width:100%;">复制饭碗儿链接</button>
-      <p style="color:var(--muted); font-size:13px; margin-top:12px;" id="share-copied" class="hidden">饭碗儿链接抄到起了。</p>
+      <button class="btn btn-gold" id="btn-copy-share" style="width:100%;" data-i18n="share.copyBtn"></button>
+      <p style="color:var(--muted); font-size:13px; margin-top:12px;" id="share-copied" class="hidden" data-i18n="share.copied"></p>
     </div>
   </div>
 
   <link rel="preconnect" href="https://challenges.cloudflare.com" crossorigin />
+  <script src="/js/i18n.js"></script>
   <script src="/js/api.js"></script>
   <script src="/js/bowl.js"></script>
 </body>

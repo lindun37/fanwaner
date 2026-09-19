@@ -1,13 +1,60 @@
-/* 🍚 饭碗儿 —— 摆个饭碗儿 */
+/* 🍔 饭碗儿 / Fanwaner —— 摆个饭碗 / 发布求助 */
 (() => {
-  const { $, $$, post, put, get, upload, toast, alertCenter } = FW;
+  const { $, $$, post, put, get, upload, toast, alertCenter, T } = FW;
+
+  /* ---------- 所有收款方式 → 面板 id / 字段 ---------- */
+  // 三组 tab 互斥：海外通用 / 链上 / 中国
+  const PAY_GROUPS = [
+    { el: "#pay-tabs", methods: ["paypal", "stripe", "kofi", "buymeacoffee", "wise", "revolut"] },
+    { el: "#pay-tabs-crypto", methods: ["btc", "eth", "sol", "usdt", "usdt_bep20", "usdt_erc20"] },
+    { el: "#pay-tabs-cn", methods: ["wechat", "alipay"] },
+  ];
+  const ALL_METHODS = PAY_GROUPS.flatMap((g) => g.methods);
+  const panelId = (m) => "#pay-" + m;
+
+  // 收款方式 → 二维码上传 key / 地址字段 id / 链接字段 id
+  const QR_KEY = {
+    wechat: "wechat_qr", alipay: "alipay_qr", usdt: "usdt_qr", usdt_bep20: "usdt_bep20_qr",
+    usdt_erc20: "usdt_erc20_qr", btc: "btc_qr", paypal: "paypal_qr",
+  };
+  const ADDR_FIELD = {
+    usdt: "#usdtAddress", usdt_bep20: "#usdtBep20Address", usdt_erc20: "#usdtErc20Address",
+    btc: "#btcAddress", eth: "#ethAddress", sol: "#solAddress",
+  };
+  const LINK_FIELD = {
+    paypal: "#paypalLink", stripe: "#stripeUrl", kofi: "#kofiUrl",
+    buymeacoffee: "#bmcUrl", wise: "#wiseEmail", revolut: "#revolutUrl",
+  };
+
+  let payMethod = "paypal";
+  let maxAmount = 1000;
+
+  /* ---------- 币种下拉 ---------- */
+  const CURRENCY_FALLBACK = ["USD", "EUR", "GBP", "CNY", "JPY", "KRW", "HKD", "TWD", "SGD", "AUD", "CAD", "INR", "BRL", "CHF"];
+  async function initCurrencies() {
+    let codes = CURRENCY_FALLBACK;
+    let def = "USD";
+    try {
+      const cfg = await get("/api/config");
+      if (Array.isArray(cfg.currencies) && cfg.currencies.length) codes = cfg.currencies;
+      if (cfg.defaultCurrency) def = cfg.defaultCurrency;
+      if (cfg.maxAmountYuan) maxAmount = cfg.maxAmountYuan;
+    } catch { /* 拿不到就用兜底 */ }
+    const sel = $("#currency");
+    sel.innerHTML = codes.map((c) => `<option value="${c}">${c}</option>`).join("");
+    sel.value = codes.includes(def) ? def : codes[0];
+    return codes;
+  }
 
   /* ---------- 编辑模式 ---------- */
   const params = new URLSearchParams(location.search);
   const editSlug = params.get("edit");
   const editToken = params.get("token") || "";
   let editBowl = null;
-  const uploads = { avatar: "", wechat_qr: "", alipay_qr: "", usdt_qr: "", usdt_bep20_qr: "", paypal_qr: "" };
+  const uploads = {
+    avatar: "", wechat_qr: "", alipay_qr: "", usdt_qr: "", usdt_bep20_qr: "",
+    usdt_erc20_qr: "", btc_qr: "", paypal_qr: "",
+  };
 
   async function initEdit() {
     if (!editSlug || !editToken) return;
@@ -19,50 +66,54 @@
       $("#title").value = editBowl.title;
       $("#want").value = editBowl.want;
       $("#reason").value = editBowl.reason;
-      $("#targetAmount").value = editBowl.targetYuan;
+      $("#nickname").value = editBowl.nickname;
+      $("#currency").value = editBowl.currency || $("#currency").value;
+      // 金额按币种主单位回显（JPY 等零小数位币种不能简单 /100）
+      const exp = ["JPY", "KRW"].includes(editBowl.currency) ? 0 : 2;
+      $("#targetAmount").value =
+        editBowl.targetMinor != null
+          ? (editBowl.targetMinor / 10 ** exp).toFixed(exp)
+          : (editBowl.targetYuan || "");
       if (editBowl.deadline) {
         const d = new Date(editBowl.deadline);
         const p = (x) => String(x).padStart(2, "0");
         $("#deadline").value = `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
       }
-      $("#nickname").value = editBowl.nickname;
-      $("#usdtAddress").value = editBowl.usdtAddress || "";
-      $("#usdtBep20Address").value = editBowl.usdtBep20Address || "";
-      $("#paypalLink").value = editBowl.paypalLink || "";
-      $("#notifyWecom").value = editBowl.notifyWecom || "";
-      $("#notifyTelegram").value = editBowl.notifyTelegram || "";
-      $("#notifyServerchan").value = editBowl.notifyServerchan || "";
-      $("#notifyEmail").value = editBowl.notifyEmail || "";
-      $("#emailApiUrl").value = editBowl.emailApiUrl || "";
-      $("#emailFrom").value = editBowl.emailFrom || "";
+      // 收款方式
+      const addrMap = { usdtAddress: editBowl.usdtAddress, usdtBep20Address: editBowl.usdtBep20Address, usdtErc20Address: editBowl.usdtErc20Address, btcAddress: editBowl.btcAddress, ethAddress: editBowl.ethAddress, solAddress: editBowl.solAddress, paypalLink: editBowl.paypalLink, stripeUrl: editBowl.stripeUrl, kofiUrl: editBowl.kofiUrl, bmcUrl: editBowl.bmcUrl, wiseEmail: editBowl.wiseEmail, revolutUrl: editBowl.revolutUrl };
+      Object.entries(addrMap).forEach(([id, v]) => { const el = $("#" + id); if (el && v) el.value = v; });
+      // 通知渠道
+      const notifyMap = { notifyWecom: editBowl.notifyWecom, notifyTelegram: editBowl.notifyTelegram, notifyServerchan: editBowl.notifyServerchan, notifyEmail: editBowl.notifyEmail, notifyDiscord: editBowl.notifyDiscord, notifySlack: editBowl.notifySlack, notifyNtfy: editBowl.notifyNtfy, notifyPushoverUser: editBowl.notifyPushoverUser, notifyWebhook: editBowl.notifyWebhook, emailApiUrl: editBowl.emailApiUrl, emailFrom: editBowl.emailFrom };
+      Object.entries(notifyMap).forEach(([id, v]) => { const el = $("#" + id); if (el && v) el.value = v; });
       // API Key 是敏感信息，不回显；不填就保留原来的
+
       $("#title-count").textContent = editBowl.title.length;
       $("#want-count").textContent = editBowl.want.length;
       $("#reason-count").textContent = editBowl.reason.length;
 
-      // 收款方式随便补：摆碗时没留的，编辑时一样可以后头加
-      $$("#pay-tabs .pay-tab").forEach((t) => { t.style.display = ""; });
-      $("#submit").textContent = "🍚 改好喽";
-      document.querySelector(".card-panel h2").textContent = "🍚 改一哈这个饭碗儿";
-      document.querySelector(".card-panel .lead").textContent = "原来的钱还是记到的，只改内容哈。";
-      // 不想改的话，可以直接去管理页放行/复制链接
+      $("#submit").textContent = T("create.editSubmit");
+      document.querySelector(".card-panel h2").textContent = T("create.editHeading");
+      const lead = document.querySelector(".card-panel .lead");
+      lead.textContent = T("create.editLead");
+
       const jump = document.createElement("a");
       jump.className = "btn btn-sm btn-ghost";
       jump.style.marginTop = "10px";
       jump.href = `/${editSlug}?token=${encodeURIComponent(editToken)}`;
-      jump.textContent = "→ 不想改了，去管理页（放行投喂 / 复制链接）";
-      document.querySelector(".card-panel .lead").after(jump);
-      if (editBowl.currentYuan > 0) {
-        $("#targetAmount").setAttribute("min", editBowl.currentYuan);
+      jump.textContent = T("create.editJump");
+      lead.after(jump);
+
+      if (editBowl.currentMinor > 0) {
+        $("#targetAmount").setAttribute("min", editBowl.currentMinor / 10 ** exp);
         const hint = document.createElement("small");
         hint.className = "hint";
-        hint.textContent = `已经收到 ¥${editBowl.currentYuan}，目标不能低于这个数。`;
+        hint.textContent = T("create.editMinHint", { amount: FW.money(editBowl.currentMinor, editBowl.currency) });
         $("label[for='targetAmount']").appendChild(hint);
       }
 
       // 回显已有的收款图 / 头像
-      ["wechat_qr", "alipay_qr", "usdt_qr", "usdt_bep20_qr", "paypal_qr", "avatar"].forEach((k) => {
-        const field = { wechat_qr: "wechatQr", alipay_qr: "alipayQr", usdt_qr: "usdtQr", usdt_bep20_qr: "usdtBep20Qr", paypal_qr: "paypalQr", avatar: "avatarUrl" }[k];
+      const fieldOf = { wechat_qr: "wechatQr", alipay_qr: "alipayQr", usdt_qr: "usdtQr", usdt_bep20_qr: "usdtBep20Qr", usdt_erc20_qr: "usdtErc20Qr", btc_qr: "btcQr", paypal_qr: "paypalQr", avatar: "avatarUrl" };
+      Object.entries(fieldOf).forEach(([k, field]) => {
         const url = editBowl[field];
         if (!url) return;
         uploads[k] = url;
@@ -78,54 +129,39 @@
         }
       });
     } catch (e) {
-      toast(e.message || "没拉到饭碗儿。");
+      toast(e.message || T("create.editLoadFailed"));
     }
   }
-  initEdit();
 
   /* ---------- 字符计数 ---------- */
-  const counts = [
-    ["#title", "#title-count"],
-    ["#want", "#want-count"],
-    ["#reason", "#reason-count"],
-  ];
-  counts.forEach(([input, out]) => {
+  [["#title", "#title-count"], ["#want", "#want-count"], ["#reason", "#reason-count"]].forEach(([input, out]) => {
     $(input).addEventListener("input", () => { $(out).textContent = $(input).value.length; });
   });
 
-  /* ---------- 收款方式切换 ---------- */
-  let payMethod = "wechat";
-  const payBoxes = { wechat: "pay-wechat", alipay: "pay-alipay", usdt: "pay-usdt", usdt_bep20: "pay-usdt_bep20", paypal: "pay-paypal" };
+  /* ---------- 收款方式切换（三组 tab 互斥） ---------- */
+  function showPayPanel(m) {
+    ALL_METHODS.forEach((k) => {
+      const el = $(panelId(k));
+      if (el) el.classList.toggle("hidden", k !== m);
+    });
+    $$(".pay-tab").forEach((t) => t.classList.toggle("active", t.dataset.pay === m));
+  }
 
-  $$("#pay-tabs .pay-tab").forEach((tab) => {
-    tab.addEventListener("click", () => {
-      $$("#pay-tabs .pay-tab").forEach((t) => t.classList.remove("active"));
-      tab.classList.add("active");
-      payMethod = tab.dataset.pay;
-      Object.entries(payBoxes).forEach(([k, id]) => {
-        const el = $(`#${id}`);
-        if (k === payMethod) {
-          el.classList.remove("hidden");
-          if (k === "wechat") el.classList.add("wechat-on");
-          if (k === "alipay") el.classList.add("alipay-on");
-        } else {
-          el.classList.add("hidden");
-        }
+  function bindPayTabs() {
+    $$(".pay-tab").forEach((tab) => {
+      tab.addEventListener("click", () => {
+        payMethod = tab.dataset.pay;
+        showPayPanel(payMethod);
       });
     });
-  });
+  }
 
   /* ---------- 图片上传 ---------- */
-  // 上传前统一处理：超大图压到 1500px 内 + 全部转成 webp。
-  // 这样 R2 只存 webp（比 jpg/png 平均省一半以上），上传流量也省；小图提醒扫码不清。
   async function prepareImage(file) {
     try {
       const bmp = await createImageBitmap(file);
       const { width, height } = bmp;
-      const shortest = Math.min(width, height);
-      if (shortest < 300) {
-        toast("图有点小，扫码怕是看不清楚，建议换张高清的。");
-      }
+      if (Math.min(width, height) < 300) toast(T("create.imgTooSmall"));
       const scale = Math.min(1, 1500 / Math.max(width, height));
       const canvas = document.createElement("canvas");
       canvas.width = Math.max(1, Math.round(width * scale));
@@ -135,10 +171,9 @@
       ctx.imageSmoothingQuality = "high";
       ctx.drawImage(bmp, 0, 0, canvas.width, canvas.height);
       bmp.close();
-      const blob = await new Promise((r) => canvas.toBlob(r, "image/webp", 0.9));
-      return blob || file;
+      return (await new Promise((r) => canvas.toBlob(r, "image/webp", 0.9))) || file;
     } catch {
-      return file; // 老浏览器转不动就原样传（后端会拦非 webp）
+      return file;
     }
   }
 
@@ -160,9 +195,9 @@
         img.src = data.url;
         img.style.cssText = "width:100%;height:100%;object-fit:cover;border-radius:8px;";
         thumb.appendChild(img);
-        toast("图片传上去了。");
+        toast(T("create.imgUploaded"));
       } catch (e) {
-        toast(e.message || "图片没传上去。");
+        toast(e.message || T("create.imgUploadFailed"));
       } finally {
         box.style.opacity = "1";
       }
@@ -175,14 +210,11 @@
   let turnstileSiteKey = "";
   let turnstileScriptReady = false;
 
-  // 脚本加载好了会自动喊这个（api.js?onload=），渲染时机就准了，莫管它加载好慢
   window.__turnstileOnload = () => {
     turnstileScriptReady = true;
     renderTurnstile();
   };
 
-  // 动态加载 Turnstile 脚本。带 ?onload= 回调，脚本自己会喊我们，渲染时机最准；
-  // 首次进入 challenges.cloudflare.com 可能加载慢/失败，加载失败就隔一会儿重试。
   function loadTurnstile(retries = 4) {
     return new Promise((resolve) => {
       if (turnstileScriptReady || typeof window.turnstile !== "undefined") return resolve(true);
@@ -200,12 +232,12 @@
     });
   }
 
-  // sitekey 拿不到就多试几次：冷启动 /api/config 可能慢，拿不到就渲染不出验证
   async function fetchSiteKey() {
     for (let i = 0; i < 5 && !turnstileSiteKey; i++) {
       try {
-        const cfg = await FW.get("/api/config");
+        const cfg = await get("/api/config");
         turnstileSiteKey = cfg.turnstileSiteKey || "";
+        if (cfg.maxAmountYuan) maxAmount = cfg.maxAmountYuan;
       } catch { /* 下次再试 */ }
       if (!turnstileSiteKey) await new Promise((r) => setTimeout(r, 400));
     }
@@ -221,40 +253,18 @@
     });
   }
 
-  async function initTurnstile() {
-    // 脚本和 sitekey 并行整：脚本先拉起，sitekey 拿不到就重试
-    loadTurnstile();
-    await fetchSiteKey();
-    // 兜底轮询：脚本首次进可能要好些秒才加载完（没缓存），到了就渲染，
-    // 莫再让用户靠刷新才看到人机验证
-    const t0 = Date.now();
-    const iv = setInterval(() => {
-      renderTurnstile();
-      if (turnstileWidget || Date.now() - t0 > 20000) clearInterval(iv);
-    }, 400);
-  }
-  initTurnstile();
-
-  // 提交前确保 token 已生成：配置/脚本没就绪就补，再主动 execute() 强制走一次。
   async function ensureTurnstileToken(timeout = 8000) {
     if (turnstileToken) return turnstileToken;
     await fetchSiteKey();
     await loadTurnstile();
     renderTurnstile();
     if (turnstileToken) return turnstileToken;
-    try {
-      if (turnstileWidget) window.turnstile.execute(turnstileWidget);
-    } catch { /* 执行不了就等 callback 自己来 */ }
+    try { if (turnstileWidget) window.turnstile.execute(turnstileWidget); } catch { }
     return new Promise((resolve) => {
       const t0 = Date.now();
       const iv = setInterval(() => {
-        if (turnstileToken) {
-          clearInterval(iv);
-          resolve(turnstileToken);
-        } else if (Date.now() - t0 >= timeout) {
-          clearInterval(iv);
-          resolve("");
-        }
+        if (turnstileToken) { clearInterval(iv); resolve(turnstileToken); }
+        else if (Date.now() - t0 >= timeout) { clearInterval(iv); resolve(""); }
       }, 150);
     });
   }
@@ -263,138 +273,183 @@
   const SLUG_RE = /^[a-z0-9][a-z0-9-]{1,18}[a-z0-9]$/;
   const slugInput = $("#slug");
   const slugPreview = $("#slug-preview");
-
   slugInput.addEventListener("input", () => {
-    // 只留英文小写 / 数字 / 短横杠，顺手转小写
     slugInput.value = slugInput.value.toLowerCase().replace(/[^a-z0-9-]/g, "").slice(0, 20);
     const v = slugInput.value.trim();
     slugPreview.textContent = v ? `${location.origin}/${v}` : "";
   });
 
+  /* ---------- 校验 ---------- */
+  const RE = {
+    hex40: /^0x[a-fA-F0-9]{40}$/,
+    btc: /^([13][a-km-zA-HJ-NP-Z1-9]{25,39}|bc1[qzry9x8gf2tvdw0s3jn54khce6mua7l][a-z0-9]{20,87})$/,
+    sol: /^[1-9A-HJ-NP-Za-km-z]{32,44}$/,
+    paypal: /^(https?:\/\/[a-z0-9.-]*(?:paypal\.me|paypal\.com)[a-zA-Z0-9/._?&=%-]*|[^\s@]+@[^\s@]+\.[^\s@]{2,})$/i,
+    stripe: /^https:\/\/[\w\-./?=&%]{4,200}$/,
+    kofi: /^https?:\/\/(www\.)?ko-fi\.com\/[A-Za-z0-9_/-]{1,60}$/,
+    bmc: /^https?:\/\/(www\.)?buymeacoffee\.com\/[A-Za-z0-9_/-]{1,60}$/,
+    revolut: /^https?:\/\/(www\.)?revolut\.me\/[A-Za-z0-9_/-]{1,60}$/,
+    wise: /^([^\s@]+@[^\s@]+\.[^\s@]{2,}|https?:\/\/wise\.com\/[\w\-./?=&%]{0,120})$/,
+    wecom: /^https:\/\/qyapi\.weixin\.qq\.com\/cgi-bin\/webhook\/send\?key=[A-Za-z0-9-]{1,80}$/,
+    discord: /^https:\/\/(canary\.|ptb\.)?discord(app)?\.com\/api\/webhooks\/\d+\/[\w-]{20,}$/,
+    slack: /^https:\/\/hooks\.slack\.com\/services\/[A-Za-z0-9/_-]{20,}$/,
+    ntfy: /^[A-Za-z0-9_-]{1,64}$/,
+    pushover: /^[A-Za-z0-9]{30}$/,
+    telegram: /^-?\d{5,15}$/,
+    serverchan: /^(SCT\d+[A-Za-z0-9]+|SCU\d{10,}[A-Za-z0-9]*)$/,
+    email: /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/,
+    emailApiUrl: /^https:\/\/[^\s]+\.[^\s]{2,}$/,
+    emailFrom: /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$|^.{1,60}\s*<[^\s@]+@[^\s@]+\.[^\s@]{2,}>$/,
+  };
+
+  // 返回 { key, el }：文案 key + 要高亮的字段
+  function validate(v) {
+    const val = (id) => (($(id) || {}).value || "").trim();
+    if (!v.title) return { key: "create.errTitle", el: "#title" };
+    if (!v.want) return { key: "create.errWant", el: "#want" };
+    if (!v.reason) return { key: "create.errReason", el: "#reason" };
+    if (!v.targetAmount || Number(v.targetAmount) <= 0) return { key: "create.errAmount", el: "#targetAmount" };
+    if (Number(v.targetAmount) > maxAmount) return { key: "create.errAmountMax", el: "#targetAmount", vars: { max: maxAmount } };
+    if (!v.nickname) return { key: "create.errNickname", el: "#nickname" };
+
+    if (v.usdtBep20Address && !RE.hex40.test(v.usdtBep20Address)) return { key: "create.errBep20", el: "#usdtBep20Address" };
+    if (v.usdtErc20Address && !RE.hex40.test(v.usdtErc20Address)) return { key: "create.errErc20", el: "#usdtErc20Address" };
+    if (v.ethAddress && !RE.hex40.test(v.ethAddress)) return { key: "create.errErc20", el: "#ethAddress" };
+    if (v.btcAddress && !RE.btc.test(v.btcAddress)) return { key: "create.errBtc", el: "#btcAddress" };
+    if (v.solAddress && !RE.sol.test(v.solAddress)) return { key: "create.errSol", el: "#solAddress" };
+
+    if (v.paypalLink && !RE.paypal.test(v.paypalLink)) return { key: "create.errPaypal", el: "#paypalLink" };
+    if (v.stripeUrl && !RE.stripe.test(v.stripeUrl)) return { key: "create.errStripe", el: "#stripeUrl" };
+    if (v.kofiUrl && !RE.kofi.test(v.kofiUrl)) return { key: "create.errKofi", el: "#kofiUrl" };
+    if (v.bmcUrl && !RE.bmc.test(v.bmcUrl)) return { key: "create.errBmc", el: "#bmcUrl" };
+    if (v.revolutUrl && !RE.revolut.test(v.revolutUrl)) return { key: "create.errRevolut", el: "#revolutUrl" };
+    if (v.wiseEmail && !RE.wise.test(v.wiseEmail)) return { key: "create.errWise", el: "#wiseEmail" };
+
+    if (v.notifyWecom && !RE.wecom.test(v.notifyWecom)) return { key: "create.errWecom", el: "#notifyWecom" };
+    if (v.notifyDiscord && !RE.discord.test(v.notifyDiscord)) return { key: "create.errDiscord", el: "#notifyDiscord" };
+    if (v.notifySlack && !RE.slack.test(v.notifySlack)) return { key: "create.errSlack", el: "#notifySlack" };
+    if (v.notifyNtfy && !RE.ntfy.test(v.notifyNtfy)) return { key: "create.errNtfy", el: "#notifyNtfy" };
+    if (v.notifyPushoverUser && !RE.pushover.test(v.notifyPushoverUser)) return { key: "create.errPushover", el: "#notifyPushoverUser" };
+    if (v.notifyPushoverToken && !RE.pushover.test(v.notifyPushoverToken)) return { key: "create.errPushover", el: "#notifyPushoverToken" };
+    if (v.notifyTelegram && !RE.telegram.test(v.notifyTelegram)) return { key: "create.errTelegram", el: "#notifyTelegram" };
+    if (v.notifyServerchan && !RE.serverchan.test(v.notifyServerchan)) return { key: "create.errServerchan", el: "#notifyServerchan" };
+    if (v.notifyEmail && !RE.email.test(v.notifyEmail)) return { key: "create.errEmail", el: "#notifyEmail" };
+    if (v.emailApiUrl && !RE.emailApiUrl.test(v.emailApiUrl)) return { key: "create.errEmailApiUrl", el: "#emailApiUrl" };
+    if (v.emailApiKey && v.emailApiKey.length < 6) return { key: "create.errEmailApiKey", el: "#emailApiKey" };
+    if (v.emailFrom && !RE.emailFrom.test(v.emailFrom)) return { key: "create.errEmailFrom", el: "#emailFrom" };
+    if (v.notifyWebhook && !RE.emailApiUrl.test(v.notifyWebhook)) return { key: "create.errEmailApiUrl", el: "#notifyWebhook" };
+
+    if (v.slugVal && !SLUG_RE.test(v.slugVal)) return { key: "create.errSlug", el: "#slug" };
+    return null;
+  }
+
+  function highlight(el) {
+    if (!el) return;
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    el.classList.add("field-error");
+    setTimeout(() => el.classList.remove("field-error"), 2200);
+    const inp = el.querySelector ? el.querySelector("input, textarea") : null;
+    if (inp) inp.focus({ preventScroll: true });
+    else if (el.focus) el.focus({ preventScroll: true });
+  }
+
   /* ---------- 提交 ---------- */
+  const collect = () => {
+    const v = (id) => (($(id) || {}).value || "").trim();
+    return {
+      title: v("#title"), want: v("#want"), reason: v("#reason"),
+      targetAmount: $("#targetAmount").value,
+      currency: $("#currency").value,
+      deadline: v("#deadline") || null,
+      nickname: v("#nickname"),
+      slugVal: v("#slug").toLowerCase(),
+      usdtAddress: v("#usdtAddress"), usdtBep20Address: v("#usdtBep20Address"), usdtErc20Address: v("#usdtErc20Address"),
+      btcAddress: v("#btcAddress"), ethAddress: v("#ethAddress"), solAddress: v("#solAddress"),
+      paypalLink: v("#paypalLink"), stripeUrl: v("#stripeUrl"), kofiUrl: v("#kofiUrl"),
+      bmcUrl: v("#bmcUrl"), wiseEmail: v("#wiseEmail"), revolutUrl: v("#revolutUrl"),
+      notifyWecom: v("#notifyWecom"), notifyTelegram: v("#notifyTelegram"), notifyServerchan: v("#notifyServerchan"),
+      notifyEmail: v("#notifyEmail"), notifyDiscord: v("#notifyDiscord"), notifySlack: v("#notifySlack"),
+      notifyNtfy: v("#notifyNtfy"), notifyPushoverUser: v("#notifyPushoverUser"),
+      notifyPushoverToken: v("#notifyPushoverToken"), notifyWebhook: v("#notifyWebhook"),
+      emailApiUrl: v("#emailApiUrl"), emailApiKey: v("#emailApiKey"), emailFrom: v("#emailFrom"),
+    };
+  };
+
   $("#submit").addEventListener("click", async () => {
     const errBox = $("#form-error");
-    errBox.textContent = "";
     const btn = $("#submit");
-    btn.disabled = true;
-    btn.textContent = "摆起中……";
-
+    errBox.textContent = "";
     const isEdit = !!(editSlug && editToken);
-    const title = $("#title").value.trim();
-    const want = $("#want").value.trim();
-    const reason = $("#reason").value.trim();
-    const targetAmount = $("#targetAmount").value;
-    const nickname = $("#nickname").value.trim();
-    const deadline = $("#deadline").value || null;
-    const usdtAddress = $("#usdtAddress").value.trim();
-    const usdtBep20Address = $("#usdtBep20Address").value.trim();
-    const paypalLink = $("#paypalLink").value.trim();
-    const notifyWecom = $("#notifyWecom").value.trim();
-    const notifyTelegram = $("#notifyTelegram").value.trim();
-    const notifyServerchan = $("#notifyServerchan").value.trim();
-    const notifyEmail = $("#notifyEmail").value.trim();
-    const emailApiUrl = $("#emailApiUrl").value.trim();
-    const emailApiKey = $("#emailApiKey").value.trim();
-    const emailFrom = $("#emailFrom").value.trim();
-    const slugVal = $("#slug").value.trim().toLowerCase();
 
-    const BEP20_RE = /^0x[a-fA-F0-9]{40}$/;
-    const PAYPAL_RE = /^(https?:\/\/[a-z0-9.-]*(?:paypal\.me|paypal\.com)[a-zA-Z0-9/._?&=%-]*|[^\s@]+@[^\s@]+\.[^\s@]{2,})$/i;
-    const EMAILAPIURL_RE = /^https:\/\/[^\s]+\.[^\s]{2,}$/;
-    const EMAILFROM_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$|^.{1,60}\s*<[^\s@]+@[^\s@]+\.[^\s@]{2,}>$/;
-
-    if (!title) errBox.textContent = "饭碗儿总得喊个啥子嘛。";
-    else if (!want) errBox.textContent = "想吃啥子还是要说清楚点嘛。";
-    else if (!reason) errBox.textContent = "为啥子要吃，总要说两句嘛。";
-    else if (!targetAmount || Number(targetAmount) <= 0) errBox.textContent = "目标金额要大于 0 哦。";
-    else if (Number(targetAmount) > 1000) errBox.textContent = "胃口莫太大，1000 块封顶了哈。";
-    else if (!nickname) errBox.textContent = "叫啥子嘛，总得留个名字。";
-    else if (usdtBep20Address && !BEP20_RE.test(usdtBep20Address)) errBox.textContent = "BEP20 地址不对头，0x 开头 42 位，看清楚哈。";
-    else if (paypalLink && !PAYPAL_RE.test(paypalLink)) errBox.textContent = "PayPal 链接或邮箱不对头，看清楚哈。";
-    else if (notifyWecom && !/^https:\/\/qyapi\.weixin\.qq\.com\/cgi-bin\/webhook\/send\?key=[A-Za-z0-9-]{1,80}$/.test(notifyWecom)) errBox.textContent = "企业微信机器人地址不对头，要那种 qyapi.weixin.qq.com 开头的。";
-    else if (notifyTelegram && !/^-?\d{5,15}$/.test(notifyTelegram)) errBox.textContent = "Telegram chat_id 不对头，要纯数字。";
-    else if (notifyServerchan && !/^(SCT\d+[A-Za-z0-9]+|SCU\d{10,}[A-Za-z0-9]*)$/.test(notifyServerchan)) errBox.textContent = "Server酱 SendKey 不对头，SCT 或 SCU 开头。";
-    else if (notifyEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(notifyEmail)) errBox.textContent = "邮箱不对头，看清楚格式嘛。";
-    else if (emailApiUrl && !EMAILAPIURL_RE.test(emailApiUrl)) errBox.textContent = "邮件 API 地址不对头，要 https:// 开头的。";
-    else if (emailApiKey && emailApiKey.length < 6) errBox.textContent = "邮件 API Key 不对头，re_ 开头的那种。";
-    else if (emailFrom && !EMAILFROM_RE.test(emailFrom)) errBox.textContent = "发件人不对头，填个邮箱或者「别名 <邮箱>」嘛。";
-    else if (slugVal && !SLUG_RE.test(slugVal)) errBox.textContent = "后缀只准用英文小写字母、数字和短横杠，3 到 20 位哈。";
-
-    if (errBox.textContent) {
-      // 错误跳转到对应字段并高亮
-      const errEl =
-        (errBox.textContent === "饭碗儿总得喊个啥子嘛。" && $("#title")) ||
-        (errBox.textContent === "想吃啥子还是要说清楚点嘛。" && $("#want")) ||
-        (errBox.textContent === "为啥子要吃，总要说两句嘛。" && $("#reason")) ||
-        (errBox.textContent === "目标金额要大于 0 哦。" && $("#targetAmount")) ||
-        (errBox.textContent === "胃口莫太大，1000 块封顶了哈。" && $("#targetAmount")) ||
-        (errBox.textContent === "叫啥子嘛，总得留个名字。" && $("#nickname")) ||
-        (errBox.textContent === "BEP20 地址不对头，0x 开头 42 位，看清楚哈。" && $("#usdtBep20Address")) ||
-        (errBox.textContent === "PayPal 链接或邮箱不对头，看清楚哈。" && $("#paypalLink")) ||
-        (errBox.textContent === "企业微信机器人地址不对头，要那种 qyapi.weixin.qq.com 开头的。" && $("#notifyWecom")) ||
-        (errBox.textContent === "Telegram chat_id 不对头，要纯数字。" && $("#notifyTelegram")) ||
-        (errBox.textContent === "Server酱 SendKey 不对头，SCT 或 SCU 开头。" && $("#notifyServerchan")) ||
-        (errBox.textContent === "邮箱不对头，看清楚格式嘛。" && $("#notifyEmail")) ||
-        (errBox.textContent === "邮件 API 地址不对头，要 https:// 开头的。" && $("#emailApiUrl")) ||
-        (errBox.textContent === "邮件 API Key 不对头，re_ 开头的那种。" && $("#emailApiKey")) ||
-        (errBox.textContent === "发件人不对头，填个邮箱或者「别名 <邮箱>」嘛。" && $("#emailFrom")) ||
-        (errBox.textContent === "后缀只准用英文小写字母、数字和短横杠，3 到 20 位哈。" && $("#slug"));
-      if (errEl) {
-        errEl.scrollIntoView({ behavior: "smooth", block: "center" });
-        errEl.classList.add("field-error");
-        setTimeout(() => errEl.classList.remove("field-error"), 2200);
-        const inp = errEl.querySelector ? errEl.querySelector("input, textarea") : null;
-        if (inp) inp.focus({ preventScroll: true });
-        else if (errEl.focus) errEl.focus({ preventScroll: true });
-      }
-      btn.disabled = false;
-      btn.textContent = isEdit ? "🍚 改好喽" : "🍚 把饭碗儿摆起";
+    const v = collect();
+    const bad = validate(v);
+    if (bad) {
+      errBox.textContent = T(bad.key, bad.vars);
+      highlight($(bad.el));
       return;
     }
 
+    btn.disabled = true;
+    btn.textContent = T("create.submitting");
+
     const payload = {
-      title,
-      want,
-      reason,
-      targetAmount: Number(targetAmount),
-      deadline,
+      title: v.title, want: v.want, reason: v.reason,
+      targetAmount: Number(v.targetAmount),
+      currency: v.currency,
+      deadline: v.deadline,
+      nickname: v.nickname,
+      avatarUrl: uploads.avatar || undefined,
+      // 收款方式
       wechatQr: uploads.wechat_qr || undefined,
       alipayQr: uploads.alipay_qr || undefined,
       usdtQr: uploads.usdt_qr || undefined,
-      usdtAddress: usdtAddress || undefined,
+      usdtAddress: v.usdtAddress || undefined,
       usdtBep20Qr: uploads.usdt_bep20_qr || undefined,
-      usdtBep20Address: usdtBep20Address || undefined,
-      paypalLink: paypalLink || undefined,
+      usdtBep20Address: v.usdtBep20Address || undefined,
+      usdtErc20Qr: uploads.usdt_erc20_qr || undefined,
+      usdtErc20Address: v.usdtErc20Address || undefined,
+      btcQr: uploads.btc_qr || undefined,
+      btcAddress: v.btcAddress || undefined,
+      ethAddress: v.ethAddress || undefined,
+      solAddress: v.solAddress || undefined,
+      paypalLink: v.paypalLink || undefined,
       paypalQr: uploads.paypal_qr || undefined,
-      notifyWecom: notifyWecom || undefined,
-      notifyTelegram: notifyTelegram || undefined,
-      notifyServerchan: notifyServerchan || undefined,
-      notifyEmail: notifyEmail || undefined,
-      emailApiUrl: emailApiUrl || undefined,
-      emailApiKey: emailApiKey || undefined,
-      emailFrom: emailFrom || undefined,
-      nickname,
-      slug: slugVal || undefined,
+      stripeUrl: v.stripeUrl || undefined,
+      kofiUrl: v.kofiUrl || undefined,
+      bmcUrl: v.bmcUrl || undefined,
+      wiseEmail: v.wiseEmail || undefined,
+      revolutUrl: v.revolutUrl || undefined,
+      // 通知渠道
+      notifyWecom: v.notifyWecom || undefined,
+      notifyTelegram: v.notifyTelegram || undefined,
+      notifyServerchan: v.notifyServerchan || undefined,
+      notifyEmail: v.notifyEmail || undefined,
+      notifyDiscord: v.notifyDiscord || undefined,
+      notifySlack: v.notifySlack || undefined,
+      notifyNtfy: v.notifyNtfy || undefined,
+      notifyPushoverUser: v.notifyPushoverUser || undefined,
+      notifyPushoverToken: v.notifyPushoverToken || undefined,
+      notifyWebhook: v.notifyWebhook || undefined,
+      emailApiUrl: v.emailApiUrl || undefined,
+      emailApiKey: v.emailApiKey || undefined,
+      emailFrom: v.emailFrom || undefined,
+      slug: v.slugVal || undefined,
       turnstileToken: (await ensureTurnstileToken()) || undefined,
     };
 
     try {
       if (isEdit) {
-        payload.avatarUrl = uploads.avatar || undefined; // 编辑重传头像也要带上，不然后端只拿到旧头像
         payload.editToken = editToken;
         delete payload.turnstileToken;
         delete payload.slug;
         await put(`/api/bowl/${editSlug}`, payload);
-        // 记住这个浏览器，下次直接打开碗页就是管理界面
         localStorage.setItem("bowl_edit_token", JSON.stringify({ slug: editSlug, token: editToken }));
-        toast("改好喽。");
+        toast(T("create.editToast"));
         location.href = `/${editSlug}?token=${encodeURIComponent(editToken)}`;
         return;
       }
 
-      payload.avatarUrl = uploads.avatar || undefined;
       const data = await post("/api/bowl", payload);
-
       localStorage.setItem("bowl_edit_token", JSON.stringify({ slug: data.slug, token: data.editToken }));
       $("#goto-bowl").href = `/${data.slug}`;
       $("#success-mask").classList.add("show");
@@ -402,11 +457,10 @@
       document.querySelector("#copy-manage").dataset.slug = data.slug;
       document.querySelector("#copy-manage").dataset.token = data.editToken;
     } catch (e) {
-      // 服务端报错（如一天摆一次的限制）在屏幕中间弹出来，莫贴到最上面看球不到
-      alertCenter(e.message || "饭碗儿没摆稳，再整一哈嘛。");
+      alertCenter(e.message || T("api.e500"));
     } finally {
       btn.disabled = false;
-      btn.textContent = isEdit ? "🍚 改好喽" : "🍚 把饭碗儿摆起";
+      btn.textContent = isEdit ? T("create.editSubmit") : T("create.submit");
     }
   });
 
@@ -414,9 +468,8 @@
   const mask = $("#success-mask");
 
   async function copyText(t) {
-    try {
-      await navigator.clipboard.writeText(t);
-    } catch {
+    try { await navigator.clipboard.writeText(t); }
+    catch {
       const ta = document.createElement("textarea");
       ta.value = t;
       document.body.appendChild(ta);
@@ -431,7 +484,6 @@
     $("#copy-tip").style.display = "block";
   });
 
-  // 管理链接：里面有令牌，打开就是管理界面（放行/复制链接）。存好，丢了就找不回了。
   $("#copy-manage").addEventListener("click", async (e) => {
     const { slug, token } = e.currentTarget.dataset;
     await copyText(`${location.origin}/${slug}?token=${encodeURIComponent(token)}`);
@@ -443,4 +495,23 @@
   mask.addEventListener("click", (e) => {
     if (e.target === mask) mask.classList.remove("show");
   });
+
+  /* ---------- 初始化 ---------- */
+  bindPayTabs();
+  showPayPanel(payMethod);
+
+  I18N.onReady(async () => {
+    await initCurrencies();
+    initEdit();
+    loadTurnstile();
+    await fetchSiteKey();
+    const t0 = Date.now();
+    const iv = setInterval(() => {
+      renderTurnstile();
+      if (turnstileWidget || Date.now() - t0 > 20000) clearInterval(iv);
+    }, 400);
+  });
+
+  // 切语言：重画 tab 文案（data-i18n 已处理静态部分），面板状态保持
+  document.addEventListener("i18n:change", () => showPayPanel(payMethod));
 })();

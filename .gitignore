@@ -21,3 +21,6 @@ Thumbs.db
 
 # 临时测试脚本（.tmp-*.mjs 一类的本地调试残留）
 .tmp-*.mjs
+
+# 线上配置（由 scripts/gen-prod-config.mjs 在 CI 里现生成，含真实 D1 ID，不进仓库）
+wrangler.prod.toml

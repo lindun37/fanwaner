@@ -1,212 +1,336 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>摆个饭碗儿嘛 —— 饭碗儿</title>
-  <meta name="description" content="有啥子困难说啥子困难，莫整虚的。把饭碗儿摆起，等个耿直人。" />
+  <title>Put out a rice bowl — Fanwaner</title>
+  <meta name="description" content="Say what you need, plainly. Put out the bowl and wait for someone kind." />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <link rel="stylesheet" href="/css/style.css" />
 </head>
 <body>
   <header class="site-header">
     <a class="brand" href="/">
-      <img src="/img/logo.svg" alt="饭碗儿 Logo" />
-      <span>饭碗儿<small>没得饭吃啷个办？先把饭碗儿摆出来嘛。</small></span>
+      <img src="/img/logo.svg" alt="Fanwaner Logo" data-i18n-aria="brand.name" />
+      <span><span data-i18n="brand.name"></span><small data-i18n="brand.tagline"></small></span>
     </a>
     <nav class="nav">
-      <a class="btn btn-sm btn-ghost" href="/">👀 去瞅哈别人的饭碗</a>
+      <span class="lang-switch" data-lang-switch></span>
+      <a class="btn btn-sm btn-ghost" href="/" data-i18n="nav.browse"></a>
     </nav>
   </header>
 
   <main>
     <div class="card-panel">
-      <h2>🍚 摆个饭碗儿嘛</h2>
-      <p class="lead">有啥子困难说啥子困难，莫整虚的。</p>
+      <h2 data-i18n="create.heading"></h2>
+      <p class="lead" data-i18n="create.lead"></p>
 
       <div class="form-error" id="form-error"></div>
 
       <div class="field">
-        <label for="title">饭碗儿喊啥子？<span class="req">*</span></label>
-        <input type="text" id="title" maxlength="50" placeholder="比如：今天想吃碗重庆小面" />
+        <label for="title"><span data-i18n="create.fieldTitle"></span><span class="req">*</span></label>
+        <input type="text" id="title" maxlength="50" data-i18n-ph="create.fieldTitlePh" />
         <div class="char-count"><span id="title-count">0</span>/50</div>
       </div>
 
       <div class="field">
-        <label for="want">想吃啥子？<span class="req">*</span></label>
-        <textarea id="want" maxlength="200" placeholder="说清楚点嘛，大家才晓得啷个投。比如：刚毕业手头紧，就想吃碗热乎的小面，加个蛋。"></textarea>
+        <label for="want"><span data-i18n="create.fieldWant"></span><span class="req">*</span></label>
+        <textarea id="want" maxlength="200" data-i18n-ph="create.fieldWantPh"></textarea>
         <div class="char-count"><span id="want-count">0</span>/200</div>
       </div>
 
       <div class="field">
-        <label for="reason">为啥子要吃？<span class="req">*</span></label>
-        <textarea id="reason" maxlength="500" placeholder="服务器要续费了 / 失业了先过渡一哈 / 就想找人请吃顿饭，扯个实话。" style="min-height:110px;"></textarea>
+        <label for="reason"><span data-i18n="create.fieldReason"></span><span class="req">*</span></label>
+        <textarea id="reason" maxlength="500" style="min-height:110px;" data-i18n-ph="create.fieldReasonPh"></textarea>
         <div class="char-count"><span id="reason-count">0</span>/500</div>
       </div>
 
+      <!-- 目标金额 + 币种（i18n 关键改动：币种不再是写死的人民币） -->
       <div class="field">
-        <label for="targetAmount">目标多少？<span class="req">*</span><span class="hint">上限 1000，人嘛，胃口莫太大。</span></label>
-        <input type="number" id="targetAmount" min="1" max="1000" step="0.01" placeholder="比如：30" />
+        <label for="targetAmount">
+          <span data-i18n="create.fieldTarget"></span><span class="req">*</span>
+          <span class="hint" data-i18n="create.fieldTargetHint"></span>
+        </label>
+        <div class="amount-row">
+          <select id="currency" class="currency-select" aria-label="Currency"></select>
+          <input type="number" id="targetAmount" min="1" step="0.01" data-i18n-ph="create.fieldTargetPh" />
+        </div>
       </div>
 
       <div class="field">
-        <label for="deadline">啷个时候收碗？<span class="hint">不填就一直等到。</span></label>
+        <label for="deadline">
+          <span data-i18n="create.fieldDeadline"></span>
+          <span class="hint" data-i18n="create.fieldDeadlineHint"></span>
+        </label>
         <input type="date" id="deadline" />
       </div>
 
       <div class="field">
-        <label>啷个收？<span class="hint">可选可不选，一个都不留，就当纯讨口饭吃。</span></label>
+        <label>
+          <span data-i18n="create.fieldPay"></span>
+          <span class="hint" data-i18n="create.fieldPayHint"></span>
+        </label>
+        <p class="pay-group-label">🌍 <span data-i18n="pay.paypal"></span> / <span data-i18n="pay.stripe"></span> / <span data-i18n="pay.kofi"></span> / <span data-i18n="pay.buymeacoffee"></span> / <span data-i18n="pay.wise"></span> / <span data-i18n="pay.revolut"></span></p>
         <div class="pay-tabs" id="pay-tabs">
-          <button type="button" class="pay-tab active" data-pay="wechat">微信</button>
-          <button type="button" class="pay-tab" data-pay="alipay">支付宝</button>
-          <button type="button" class="pay-tab" data-pay="usdt">USDT(TRC20)</button>
-          <button type="button" class="pay-tab" data-pay="usdt_bep20">USDT(BEP20)</button>
-          <button type="button" class="pay-tab" data-pay="paypal">PayPal</button>
+          <button type="button" class="pay-tab active" data-pay="paypal" data-i18n="pay.paypal"></button>
+          <button type="button" class="pay-tab" data-pay="stripe" data-i18n="pay.stripe"></button>
+          <button type="button" class="pay-tab" data-pay="kofi" data-i18n="pay.kofi"></button>
+          <button type="button" class="pay-tab" data-pay="buymeacoffee" data-i18n="pay.buymeacoffee"></button>
+          <button type="button" class="pay-tab" data-pay="wise" data-i18n="pay.wise"></button>
+          <button type="button" class="pay-tab" data-pay="revolut" data-i18n="pay.revolut"></button>
+        </div>
+
+        <p class="pay-group-label">⛓️ <span data-i18n="pay.btc"></span> / <span data-i18n="pay.eth"></span> / <span data-i18n="pay.sol"></span> / USDT</p>
+        <div class="pay-tabs" id="pay-tabs-crypto">
+          <button type="button" class="pay-tab" data-pay="btc" data-i18n="pay.btc"></button>
+          <button type="button" class="pay-tab" data-pay="eth" data-i18n="pay.eth"></button>
+          <button type="button" class="pay-tab" data-pay="sol" data-i18n="pay.sol"></button>
+          <button type="button" class="pay-tab" data-pay="usdt" data-i18n="pay.usdt"></button>
+          <button type="button" class="pay-tab" data-pay="usdt_bep20" data-i18n="pay.usdt_bep20"></button>
+          <button type="button" class="pay-tab" data-pay="usdt_erc20" data-i18n="pay.usdt_erc20"></button>
+        </div>
+
+        <p class="pay-group-label">🇨🇳 <span data-i18n="pay.wechat"></span> / <span data-i18n="pay.alipay"></span></p>
+        <div class="pay-tabs" id="pay-tabs-cn">
+          <button type="button" class="pay-tab" data-pay="wechat" data-i18n="pay.wechat"></button>
+          <button type="button" class="pay-tab" data-pay="alipay" data-i18n="pay.alipay"></button>
+        </div>
+
+        <!-- 链接型收款（PayPal / Stripe / Ko-fi / BMC / Revolut / Wise） -->
+        <div id="pay-paypal" class="field">
+          <label><span data-i18n-pay="pay.linkLabel" data-pay-name="pay.paypal"></span> <span class="hint" data-i18n-pay="pay.linkHint" data-pay-name="pay.paypal"></span></label>
+          <input type="text" id="paypalLink" maxlength="128" data-i18n-ph="pay.linkPh" autocomplete="off" spellcheck="false" />
+          <label style="margin-top:14px;"><span data-i18n-pay="pay.qrLabel" data-pay-name="pay.paypal"></span> <span class="hint" data-i18n="notify.footerHint" hidden></span></label>
+          <div class="upload-box" data-upload="paypal_qr">
+            <div class="thumb" data-thumb>＋</div>
+            <div class="tip"><strong data-i18n-pay="pay.uploadTip" data-pay-name="pay.paypal"></strong></div>
+            <input type="file" accept="image/jpeg,image/png,image/webp" hidden />
+          </div>
+        </div>
+
+        <div id="pay-stripe" class="field hidden">
+          <label><span data-i18n-pay="pay.linkLabel" data-pay-name="pay.stripe"></span> <span class="hint" data-i18n-pay="pay.linkOnlyHint" data-pay-name="pay.stripe"></span></label>
+          <input type="text" id="stripeUrl" maxlength="200" placeholder="https://buy.stripe.com/xxxx" autocomplete="off" spellcheck="false" />
+        </div>
+
+        <div id="pay-kofi" class="field hidden">
+          <label><span data-i18n-pay="pay.linkOnlyHint" data-pay-name="pay.kofi"></span></label>
+          <input type="text" id="kofiUrl" maxlength="128" placeholder="https://ko-fi.com/yourname" autocomplete="off" spellcheck="false" />
+        </div>
+
+        <div id="pay-buymeacoffee" class="field hidden">
+          <label><span data-i18n-pay="pay.linkOnlyHint" data-pay-name="pay.buymeacoffee"></span></label>
+          <input type="text" id="bmcUrl" maxlength="128" placeholder="https://buymeacoffee.com/yourname" autocomplete="off" spellcheck="false" />
+        </div>
+
+        <div id="pay-wise" class="field hidden">
+          <label><span data-i18n-pay="pay.linkLabel" data-pay-name="pay.wise"></span> <span class="hint" data-i18n-pay="pay.linkHint" data-pay-name="pay.wise"></span></label>
+          <input type="text" id="wiseEmail" maxlength="128" placeholder="you@example.com" autocomplete="off" spellcheck="false" />
+        </div>
+
+        <div id="pay-revolut" class="field hidden">
+          <label><span data-i18n-pay="pay.linkOnlyHint" data-pay-name="pay.revolut"></span></label>
+          <input type="text" id="revolutUrl" maxlength="128" placeholder="https://revolut.me/yourname" autocomplete="off" spellcheck="false" />
+        </div>
+
+        <!-- 链上地址型 -->
+        <div id="pay-btc" class="field hidden">
+          <label><span data-i18n-pay="pay.addrLabel" data-pay-name="pay.btc"></span> <span class="hint" data-i18n="pay.addrWarn"></span></label>
+          <input type="text" id="btcAddress" maxlength="64" placeholder="bc1... / 1... / 3..." autocomplete="off" spellcheck="false" />
+          <div class="upload-box" data-upload="btc_qr" style="margin-top:12px;">
+            <div class="thumb" data-thumb>＋</div>
+            <div class="tip"><strong data-i18n-pay="pay.uploadTip" data-pay-name="pay.btc"></strong></div>
+            <input type="file" accept="image/jpeg,image/png,image/webp" hidden />
+          </div>
+        </div>
+
+        <div id="pay-eth" class="field hidden">
+          <label><span data-i18n-pay="pay.addrLabel" data-pay-name="pay.eth"></span> <span class="hint" data-i18n="pay.addrWarn"></span></label>
+          <input type="text" id="ethAddress" maxlength="42" placeholder="0x..." autocomplete="off" spellcheck="false" />
+        </div>
+
+        <div id="pay-sol" class="field hidden">
+          <label><span data-i18n-pay="pay.addrLabel" data-pay-name="pay.sol"></span> <span class="hint" data-i18n="pay.addrWarn"></span></label>
+          <input type="text" id="solAddress" maxlength="44" placeholder="Solana address" autocomplete="off" spellcheck="false" />
+        </div>
+
+        <div id="pay-usdt" class="field hidden">
+          <label><span data-i18n-pay="pay.addrLabel" data-pay-name="pay.usdt"></span> <span class="hint" data-i18n="pay.addrWarn"></span></label>
+          <input type="text" id="usdtAddress" maxlength="64" placeholder="T..." autocomplete="off" spellcheck="false" />
+          <div class="upload-box" data-upload="usdt_qr" style="margin-top:12px;">
+            <div class="thumb" data-thumb>＋</div>
+            <div class="tip"><strong data-i18n-pay="pay.uploadTip" data-pay-name="pay.usdt"></strong></div>
+            <input type="file" accept="image/jpeg,image/png,image/webp" hidden />
+          </div>
+        </div>
+
+        <div id="pay-usdt_bep20" class="field hidden">
+          <label><span data-i18n-pay="pay.addrLabel" data-pay-name="pay.usdt_bep20"></span> <span class="hint" data-i18n="pay.addrWarn"></span></label>
+          <input type="text" id="usdtBep20Address" maxlength="42" placeholder="0x..." autocomplete="off" spellcheck="false" />
+          <div class="upload-box" data-upload="usdt_bep20_qr" style="margin-top:12px;">
+            <div class="thumb" data-thumb>＋</div>
+            <div class="tip"><strong data-i18n-pay="pay.uploadTip" data-pay-name="pay.usdt_bep20"></strong></div>
+            <input type="file" accept="image/jpeg,image/png,image/webp" hidden />
+          </div>
+        </div>
+
+        <div id="pay-usdt_erc20" class="field hidden">
+          <label><span data-i18n-pay="pay.addrLabel" data-pay-name="pay.usdt_erc20"></span> <span class="hint" data-i18n="pay.addrWarn"></span></label>
+          <input type="text" id="usdtErc20Address" maxlength="42" placeholder="0x..." autocomplete="off" spellcheck="false" />
+          <div class="upload-box" data-upload="usdt_erc20_qr" style="margin-top:12px;">
+            <div class="thumb" data-thumb>＋</div>
+            <div class="tip"><strong data-i18n-pay="pay.uploadTip" data-pay-name="pay.usdt_erc20"></strong></div>
+            <input type="file" accept="image/jpeg,image/png,image/webp" hidden />
+          </div>
         </div>
 
         <div id="pay-wechat" class="field hidden">
-          <label>微信收款码 <span class="hint">图莫得传的话，投的人扫不到哦</span></label>
+          <label><span data-i18n-pay="pay.qrLabel" data-pay-name="pay.wechat"></span> <span class="hint" data-i18n-pay="pay.qrHint"></span></label>
           <div class="upload-box" data-upload="wechat_qr">
             <div class="thumb" data-thumb>＋</div>
-            <div class="tip"><strong>传一张微信收款码</strong>自动转成 webp，2MB 以内</div>
+            <div class="tip"><strong data-i18n-pay="pay.uploadTip" data-pay-name="pay.wechat"></strong></div>
             <input type="file" accept="image/jpeg,image/png,image/webp" hidden />
           </div>
         </div>
 
         <div id="pay-alipay" class="field hidden">
-          <label>支付宝收款码 <span class="hint">图莫得传的话，投的人扫不到哦</span></label>
+          <label><span data-i18n-pay="pay.qrLabel" data-pay-name="pay.alipay"></span> <span class="hint" data-i18n-pay="pay.qrHint"></span></label>
           <div class="upload-box" data-upload="alipay_qr">
             <div class="thumb" data-thumb>＋</div>
-            <div class="tip"><strong>传一张支付宝收款码</strong>自动转成 webp，2MB 以内</div>
-            <input type="file" accept="image/jpeg,image/png,image/webp" hidden />
-          </div>
-        </div>
-
-        <div id="pay-usdt" class="field hidden">
-          <label>USDT 收款图 <span class="hint">传一张 USDT 收款码，有就传，莫得就算了</span></label>
-          <div class="upload-box" data-upload="usdt_qr">
-            <div class="thumb" data-thumb>＋</div>
-            <div class="tip"><strong>传一张 USDT 收款码</strong>自动转成 webp，2MB 以内</div>
-            <input type="file" accept="image/jpeg,image/png,image/webp" hidden />
-          </div>
-          <label style="margin-top:14px;">USDT TRC20 地址 <span class="hint">有图就莫得必填地址</span></label>
-          <input type="text" id="usdtAddress" maxlength="64" placeholder="T 开头的地址，看清楚哈。" />
-          <div class="alert" style="margin-top:10px;">转之前看清楚哈，地址错了，饭碗儿也救不回来。</div>
-        </div>
-
-        <div id="pay-usdt_bep20" class="field hidden">
-          <label>USDT BEP20 收款图 <span class="hint">传一张 BEP20 收款码，有就传，莫得就算了</span></label>
-          <div class="upload-box" data-upload="usdt_bep20_qr">
-            <div class="thumb" data-thumb>＋</div>
-            <div class="tip"><strong>传一张 USDT BEP20 收款码</strong>自动转成 webp，2MB 以内</div>
-            <input type="file" accept="image/jpeg,image/png,image/webp" hidden />
-          </div>
-          <label style="margin-top:14px;">USDT BEP20 地址 <span class="hint">有图就莫得必填地址</span></label>
-          <input type="text" id="usdtBep20Address" maxlength="42" placeholder="0x 开头的地址，看清楚哈。" autocomplete="off" spellcheck="false" />
-          <div class="alert" style="margin-top:10px;">转之前看清楚哈，地址错了，饭碗儿也救不回来。</div>
-        </div>
-
-        <div id="pay-paypal" class="field hidden">
-          <label>PayPal 收款链接或邮箱 <span class="hint">paypal.me 链接或者邮箱都行，选一个填</span></label>
-          <input type="text" id="paypalLink" maxlength="128" placeholder="比如：https://paypal.me/cunzhang 或 you@example.com" autocomplete="off" spellcheck="false" />
-          <label style="margin-top:14px;">PayPal 收款图 <span class="hint">有就传，莫得就算了</span></label>
-          <div class="upload-box" data-upload="paypal_qr">
-            <div class="thumb" data-thumb>＋</div>
-            <div class="tip"><strong>传一张 PayPal 收款码</strong>自动转成 webp，2MB 以内</div>
+            <div class="tip"><strong data-i18n-pay="pay.uploadTip" data-pay-name="pay.alipay"></strong></div>
             <input type="file" accept="image/jpeg,image/png,image/webp" hidden />
           </div>
         </div>
       </div>
 
       <div class="field">
-        <label for="nickname">叫啥子嘛？<span class="req">*</span></label>
-        <input type="text" id="nickname" maxlength="30" placeholder="昵称，30 个字以内" />
+        <label for="nickname"><span data-i18n="create.fieldNickname"></span><span class="req">*</span></label>
+        <input type="text" id="nickname" maxlength="30" data-i18n-ph="create.fieldNicknamePh" />
       </div>
 
       <div class="field" id="slug-field">
-        <label for="slug">碗的地址后缀 <span class="hint">可选，留空就随机整个。3-20 位，英文小写 / 数字 / 短横杠。</span></label>
-        <input type="text" id="slug" maxlength="20" placeholder="比如：cunzhang" autocomplete="off" spellcheck="false" />
+        <label for="slug">
+          <span data-i18n="create.fieldSlug"></span>
+          <span class="hint" data-i18n="create.fieldSlugHint"></span>
+        </label>
+        <input type="text" id="slug" maxlength="20" data-i18n-ph="create.fieldSlugPh" autocomplete="off" spellcheck="false" />
         <div class="slug-preview" id="slug-preview"></div>
       </div>
 
       <div class="field">
-          <label>头像 <span class="hint">可以不传</span></label>
-          <div class="upload-box" data-upload="avatar">
-            <div class="thumb" data-thumb>🍚</div>
-            <div class="tip"><strong>传个头像</strong>自动转成 webp，2MB 以内</div>
-            <input type="file" accept="image/jpeg,image/png,image/webp" hidden />
-          </div>
+        <label>
+          <span data-i18n="create.fieldAvatar"></span>
+          <span class="hint" data-i18n="create.fieldAvatarHint"></span>
+        </label>
+        <div class="upload-box" data-upload="avatar">
+          <div class="thumb" data-thumb>🍚</div>
+          <div class="tip"><strong data-i18n="create.fieldAvatar"></strong></div>
+          <input type="file" accept="image/jpeg,image/png,image/webp" hidden />
+        </div>
+      </div>
+
+      <details class="notify-box">
+        <summary>
+          <span data-i18n="notify.title"></span>
+          <span class="hint" data-i18n="notify.hint"></span>
+          <span class="caret">▾</span>
+        </summary>
+
+        <p class="pay-group-label">🌍 Discord / Slack / ntfy / Pushover / Webhook</p>
+        <div class="field">
+          <label for="notifyDiscord"><span data-i18n="notify.discord"></span> <span class="hint" data-i18n="notify.discordHint"></span></label>
+          <input type="text" id="notifyDiscord" maxlength="200" placeholder="https://discord.com/api/webhooks/..." autocomplete="off" spellcheck="false" />
+        </div>
+        <div class="field">
+          <label for="notifySlack"><span data-i18n="notify.slack"></span> <span class="hint" data-i18n="notify.slackHint"></span></label>
+          <input type="text" id="notifySlack" maxlength="200" placeholder="https://hooks.slack.com/services/..." autocomplete="off" spellcheck="false" />
+        </div>
+        <div class="field">
+          <label for="notifyNtfy"><span data-i18n="notify.ntfy"></span> <span class="hint" data-i18n="notify.ntfyHint"></span></label>
+          <input type="text" id="notifyNtfy" maxlength="64" placeholder="my-fanwaner-alerts" autocomplete="off" spellcheck="false" />
+        </div>
+        <div class="field">
+          <label for="notifyPushoverUser"><span data-i18n="notify.pushoverUser"></span> <span class="hint" data-i18n="notify.pushoverHint"></span></label>
+          <input type="text" id="notifyPushoverUser" maxlength="30" placeholder="u..." autocomplete="off" spellcheck="false" />
+          <label for="notifyPushoverToken" style="margin-top:10px;" data-i18n="notify.pushoverToken"></label>
+          <input type="text" id="notifyPushoverToken" maxlength="30" placeholder="a..." autocomplete="off" spellcheck="false" />
+        </div>
+        <div class="field">
+          <label for="notifyWebhook"><span data-i18n="notify.webhook"></span> <span class="hint" data-i18n="notify.webhookHint"></span></label>
+          <input type="text" id="notifyWebhook" maxlength="200" placeholder="https://hooks.zapier.com/..." autocomplete="off" spellcheck="false" />
         </div>
 
-        <details class="notify-box">
-          <summary>
-            🔔 留言提醒 <span class="hint">有人在你碗儿头留言了，第一时间喊你（可选）</span>
-            <span class="caret">▾</span>
-          </summary>
+        <p class="pay-group-label">✈️ Telegram</p>
+        <div class="field">
+          <label for="notifyTelegram"><span data-i18n="notify.telegram"></span> <span class="hint" data-i18n="notify.telegramHint"></span></label>
+          <input type="text" id="notifyTelegram" maxlength="20" placeholder="123456789" autocomplete="off" spellcheck="false" />
+        </div>
+
+        <p class="pay-group-label">🇨🇳 <span data-i18n="notify.wecom"></span> / <span data-i18n="notify.serverchan"></span></p>
+        <div class="field">
+          <label for="notifyWecom"><span data-i18n="notify.wecom"></span> <span class="hint" data-i18n="notify.wecomHint"></span></label>
+          <input type="text" id="notifyWecom" maxlength="200" placeholder="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxx" autocomplete="off" spellcheck="false" />
+        </div>
+        <div class="field">
+          <label for="notifyServerchan"><span data-i18n="notify.serverchan"></span> <span class="hint" data-i18n="notify.serverchanHint"></span></label>
+          <input type="text" id="notifyServerchan" maxlength="80" placeholder="SCT..." autocomplete="off" spellcheck="false" />
+        </div>
+
+        <div class="notify-email-box">
+          <p class="notify-email-title">
+            <span data-i18n="notify.emailBoxTitle"></span>
+            <span class="hint" data-i18n="notify.emailBoxHint"></span>
+          </p>
           <div class="field">
-            <label for="notifyWecom">企业微信机器人 Webhook <span class="hint">微信群加「群机器人」后复制那个 webhook 地址</span></label>
-            <input type="text" id="notifyWecom" maxlength="200" placeholder="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxx" autocomplete="off" spellcheck="false" />
+            <label for="notifyEmail"><span data-i18n="notify.emailTo"></span> <span class="hint" data-i18n="notify.emailToHint"></span></label>
+            <input type="email" id="notifyEmail" maxlength="128" placeholder="you@example.com" autocomplete="off" spellcheck="false" />
+          </div>
+          <p class="notify-email-note" data-i18n-html="notify.emailNote"></p>
+          <div class="field">
+            <label for="emailApiUrl"><span data-i18n="notify.emailApiUrl"></span> <span class="hint" data-i18n="notify.emailApiUrlHint"></span></label>
+            <input type="text" id="emailApiUrl" maxlength="200" placeholder="https://api.resend.com/emails" autocomplete="off" spellcheck="false" />
           </div>
           <div class="field">
-            <label for="notifyTelegram">Telegram chat_id <span class="hint">不用自己建机器人，平台内置机器人自动发。找 @userinfobot 查你的 chat_id；头一次用先给平台机器人发一句 /start，它才发得进来</span></label>
-            <input type="text" id="notifyTelegram" maxlength="20" placeholder="比如：123456789" autocomplete="off" spellcheck="false" />
+            <label for="emailApiKey"><span data-i18n="notify.emailApiKey"></span> <span class="hint" data-i18n="notify.emailApiKeyHint"></span></label>
+            <input type="password" id="emailApiKey" maxlength="128" placeholder="re_xxxxxxxxxxxxxxxx" autocomplete="off" spellcheck="false" />
           </div>
           <div class="field">
-            <label for="notifyServerchan">Server酱 SendKey <span class="hint">sct.ftqq.com 申请，推到你个人微信</span></label>
-            <input type="text" id="notifyServerchan" maxlength="80" placeholder="SCT 开头的 SendKey" autocomplete="off" spellcheck="false" />
+            <label for="emailFrom"><span data-i18n="notify.emailFrom"></span> <span class="hint" data-i18n="notify.emailFromHint"></span></label>
+            <input type="text" id="emailFrom" maxlength="128" placeholder="Fanwaner &lt;onboarding@resend.dev&gt;" autocomplete="off" spellcheck="false" />
           </div>
-          <div class="notify-email-box">
-            <p class="notify-email-title">📮 邮箱提醒 <span class="hint">分两半：上面填收信邮箱，下面配一个「发信通道」</span></p>
-            <div class="field">
-              <label for="notifyEmail">提醒发到哪个邮箱？<span class="hint">QQ / Gmail / 163 都行，这是收信方，莫得额外配置</span></label>
-              <input type="email" id="notifyEmail" maxlength="128" placeholder="you@example.com" autocomplete="off" spellcheck="false" />
-            </div>
-            <p class="notify-email-note">下面的「发信通道」：留言提醒的邮件是平台调一个邮件服务的接口帮你发的，不是拿你 QQ/Gmail 邮箱密码发的。推荐注册 <strong>resend.com</strong>（免费 100 封/天，不用绑卡）→ API Keys 建一个 re_ 开头的 Key 填下来就行。</p>
-            <div class="field">
-              <label for="emailApiUrl">发信通道 · API 地址 <span class="hint">用 Resend 的话，默认这个就行</span></label>
-              <input type="text" id="emailApiUrl" maxlength="200" placeholder="https://api.resend.com/emails" autocomplete="off" spellcheck="false" />
-            </div>
-            <div class="field">
-              <label for="emailApiKey">发信通道 · API Key <span class="hint">Resend 后台建一个，re_ 开头。不填就不改</span></label>
-              <input type="password" id="emailApiKey" maxlength="128" placeholder="re_xxxxxxxxxxxxxxxx" autocomplete="off" spellcheck="false" />
-            </div>
-            <div class="field">
-              <label for="emailFrom">发信通道 · 发件人 <span class="hint">可选，默认 onboarding@resend.dev</span></label>
-              <input type="text" id="emailFrom" maxlength="128" placeholder="饭碗儿 <onboarding@resend.dev>" autocomplete="off" spellcheck="false" />
-            </div>
-          </div>
-          <p class="hint" style="margin:10px 0 0;">四条路随便填哪条都行，也可以全填。留言一到，马上就喊你。这里头的信息只有你自己看得到，不会公开。</p>
-        </details>
+        </div>
+        <p class="hint" style="margin:10px 0 0;" data-i18n="notify.footerHint"></p>
+      </details>
 
       <div class="turnstile-wrap" id="turnstile-wrap"></div>
 
-      <button class="btn btn-lg btn-primary" id="submit" style="width:100%;">🍚 把饭碗儿摆起</button>
+      <button class="btn btn-lg btn-primary" id="submit" style="width:100%;" data-i18n="create.submit"></button>
     </div>
   </main>
 
   <footer class="site-footer">
-    <p>🍚 饭碗儿 · 问斗是先吃饭</p>
-    <p>饭钱不经过我们，直接甩给摆碗的兄弟伙。</p>
-    <p>我们只负责记到：哪个兄弟伙，今天有人投过饭。</p>
+    <p data-i18n="brand.footerTagline"></p>
+    <p data-i18n="brand.footerNote1"></p>
+    <p data-i18n="brand.footerNote2"></p>
   </footer>
 
-  <!-- 摆好之后的成功弹窗 -->
   <div class="modal-mask" id="success-mask">
     <div class="modal" style="text-align:center;">
-      <h3>饭碗儿摆起了！🍚</h3>
-      <p class="lead" style="margin-bottom:16px;">现在就差哪个耿直人来投一口了。</p>
-      <button class="btn btn-gold" id="copy-link" style="width:100%; margin-bottom:10px;">复制饭碗儿链接</button>
-      <button class="btn btn-ghost" id="copy-manage" style="width:100%; margin-bottom:10px;">🔑 复制管理链接（存好，莫搞丢了）</button>
-      <div class="alert" id="copy-tip" style="display:none;">链接已经抄到起了，拿出去喊兄弟伙来瞅一哈。</div>
-      <div class="alert" id="manage-tip" style="display:none;">管理链接抄到起了。存到备忘录 / 微信文件传输助手，以后随便哪个浏览器打开都能改饭碗儿、放行投喂。</div>
+      <h3 data-i18n="create.successTitle"></h3>
+      <p class="lead" style="margin-bottom:16px;" data-i18n="create.successSub"></p>
+      <button class="btn btn-gold" id="copy-link" style="width:100%; margin-bottom:10px;" data-i18n="create.copyLink"></button>
+      <button class="btn btn-ghost" id="copy-manage" style="width:100%; margin-bottom:10px;" data-i18n="create.copyManage"></button>
+      <div class="alert" id="copy-tip" style="display:none;" data-i18n="create.copyTip"></div>
+      <div class="alert" id="manage-tip" style="display:none;" data-i18n="create.manageTip"></div>
       <div class="btn-row" style="justify-content:center; margin-top:14px;">
-        <a class="btn" id="goto-bowl">进去瞅一哈 →</a>
-        <button class="btn btn-ghost" id="another-bowl">再摆一个</button>
+        <a class="btn" id="goto-bowl" data-i18n="create.gotoBowl"></a>
+        <button class="btn btn-ghost" id="another-bowl" data-i18n="create.anotherBowl"></button>
       </div>
     </div>
   </div>
 
   <link rel="preconnect" href="https://challenges.cloudflare.com" crossorigin />
+  <script src="/js/i18n.js"></script>
   <script src="/js/api.js"></script>
   <script src="/js/create.js"></script>
 </body>
