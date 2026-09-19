@@ -899,6 +899,15 @@ img { max-width: 100%; }
 
 /* Turnstile 容器居中 */
 .turnstile-wrap { display: flex; justify-content: center; margin: 4px 0 18px; }
+/* 人机验证加载失败时挂在控件下的一行提示；JS 会在末尾补上 Turnstile 错误码 */
+.ts-hint {
+  margin: -8px 0 14px;
+  color: var(--red-deep);
+  font-size: 13px;
+  line-height: 1.55;
+  text-align: center;
+}
+.ts-hint .ts-code { color: var(--muted); white-space: nowrap; }
 
 /* 后台表格 */
 .admin-table { width: 100%; border-collapse: collapse; font-size: 14px; }

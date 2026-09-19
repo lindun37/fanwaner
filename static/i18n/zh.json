@@ -24,6 +24,7 @@
     "save": "保存",
     "language": "语言",
     "networkError": "网络有问题，再试一哈。",
+    "turnstileHint": "人机验证没能加载出来。刷新一次通常就好；要是一直不行，试试关掉代理 / VPN 或换个网络。",
     "unknownError": "出了点岔子。",
     "ok": "晓得了",
     "reload": "再整一次"

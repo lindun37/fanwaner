@@ -451,12 +451,37 @@
     }
   }
 
+  /* Turnstile 加载不出来时（110200 = 域名没在 CF 后台授权、200500 = 脚本被拦…），
+     在控件下方挂一行人话提示，并把错误码原样带出来 —— 不然访客只看到一片空白
+     和一个点了没反应的按钮。 */
+  function showTurnstileHint(code) {
+    const wrap = $("#turnstile-wrap");
+    if (!wrap) return;
+    let el = wrap.nextElementSibling;
+    if (!el || !el.classList || !el.classList.contains("ts-hint")) {
+      el = document.createElement("p");
+      el.className = "ts-hint";
+      wrap.insertAdjacentElement("afterend", el);
+    }
+    el.textContent = T("common.turnstileHint");
+    if (code) {
+      const c = document.createElement("span");
+      c.className = "ts-code";
+      c.textContent = ` (${code})`;
+      el.appendChild(c);
+    }
+  }
+  function clearTurnstileHint() {
+    const el = document.querySelector(".ts-hint");
+    if (el) el.remove();
+  }
+
   function renderTurnstile() {
     if (turnstileWidget || !turnstileSiteKey || typeof window.turnstile === "undefined") return;
     turnstileWidget = window.turnstile.render($("#turnstile-wrap"), {
       sitekey: turnstileSiteKey,
-      callback: (t) => { turnstileToken = t; },
-      "error-callback": () => { turnstileToken = ""; },
+      callback: (t) => { turnstileToken = t; clearTurnstileHint(); },
+      "error-callback": (code) => { turnstileToken = ""; showTurnstileHint(code); },
       "expired-callback": () => { turnstileToken = ""; },
     });
   }
@@ -467,7 +492,8 @@
   async function ensureTurnstileToken(timeout = 8000) {
     if (turnstileToken) return turnstileToken;
     await fetchSiteKey();
-    await loadTurnstile();
+    const scriptOk = await loadTurnstile();
+    if (!scriptOk && turnstileSiteKey) showTurnstileHint("");
     renderTurnstile();
     if (turnstileToken) return turnstileToken;
     try { if (turnstileWidget) window.turnstile.execute(turnstileWidget); } catch { }
@@ -567,7 +593,10 @@
       const t0 = Date.now();
       const iv = setInterval(() => {
         renderTurnstile();
-        if (turnstileWidget || Date.now() - t0 > 15000) clearInterval(iv);
+        if (turnstileWidget || Date.now() - t0 > 15000) {
+          clearInterval(iv);
+          if (!turnstileWidget && turnstileSiteKey) showTurnstileHint("");
+        }
       }, 400);
     }
   }

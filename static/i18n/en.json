@@ -24,6 +24,7 @@
     "save": "Save",
     "language": "Language",
     "networkError": "Network error. Please try again.",
+    "turnstileHint": "The human check couldn't load. Refreshing usually fixes it; if it keeps failing, try turning off your VPN/proxy or switching networks.",
     "unknownError": "Something went wrong.",
     "ok": "Got it",
     "reload": "Try again"
