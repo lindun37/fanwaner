@@ -158,7 +158,9 @@ img { max-width: 100%; }
   margin: 12px auto 30px;
   color: var(--ink-soft);
   font-size: clamp(15px, 2.2vw, 18px);
-  max-width: 560px;
+  /* 620px：英文副标题固有宽度约 570px，原 560px 会把末词挤成孤字换行。
+     中文 22 字约 396px，放宽不影响中文断行。 */
+  max-width: 620px;
 }
 
 .hero .slogan {

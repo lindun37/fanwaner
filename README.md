@@ -3,7 +3,7 @@
 > 🌏 **中文版：[README.zh-CN.md](README.zh-CN.md)**
 
 <p align="center">
-  <img src="static/img/pic.png" alt="Fanwaner home page" width="720" />
+  <img src="static/img/pic-en.png" alt="Fanwaner home page — No money for food? Put out a meal." width="720" />
 </p>
 
 **Broke? Put out a meal and let a stranger buy it for you.**
