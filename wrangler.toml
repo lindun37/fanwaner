@@ -1,23 +1,26 @@
-# 饭碗儿 —— Cloudflare Worker 配置
-# 部署前需要：wrangler d1 create fanwaner / wrangler r2 bucket create fanwaner-assets，
-# 把 database_id 填到下面；再 wrangler secret put 三个密钥（见 .env.example）。
+# Fanwaner — Cloudflare Worker configuration
+# Before deploying: run `wrangler d1 create fanwaner` and `wrangler r2 bucket create fanwaner-assets`,
+# paste the generated database_id below, then set the secrets with `wrangler secret put`
+# (see .env.example for the full list).
 
 name = "fanwaner"
 main = "src/index.js"
 compatibility_date = "2025-12-01"
 compatibility_flags = ["nodejs_compat"]
 
-# 静态资源：所有请求先过 Worker（run_worker_first），由 Worker 分流 /api/* 与静态页
-# html_handling = "none"：不做 .html 的 clean-url 重定向，保证 /bowl.html 能被 Worker 注入 OG meta
+# Static assets: every request runs through the Worker first (run_worker_first), which then
+# routes /api/* and static pages.
+# html_handling = "none" disables clean-url redirects so that /bowl.html reaches the Worker,
+# which is what lets us inject localized Open Graph meta tags.
 assets = { directory = "./static", binding = "ASSETS", run_worker_first = true, not_found_handling = "none", html_handling = "none" }
 
-# 可选：绑自定义域名（不配就用 workers.dev 域名）
+# Optional: bind a custom domain (otherwise the workers.dev domain is used)
 # routes = [{ pattern = "fanwaner.example.com", custom_domain = true }]
 
 [[d1_databases]]
 binding = "DB"
 database_name = "fanwaner"
-database_id = "" # 填 wrangler d1 create 生成的 id
+database_id = "" # paste the id printed by `wrangler d1 create`
 migrations_dir = "migrations"
 
 [[r2_buckets]]
@@ -25,23 +28,27 @@ binding = "BUCKET"
 bucket_name = "fanwaner-assets"
 
 [vars]
-TURNSTILE_SITE_KEY = "" # Turnstile 站点公开 sitekey
-MAX_AMOUNT_YUAN = 1000 # 单笔金额上限（按所选币种的主单位算：USD→1000 美元、JPY→1000 日元）
-MAX_UPLOAD_BYTES = 2097152 # 图片上传大小上限（2MB）
-R2_FONT_KEY = "fonts/NotoSansSC-Regular.otf" # OG 图用的字体在 R2 的 key
-# 海外场景建议改用拉丁字体（体积小很多，约 300KB）：
+TURNSTILE_SITE_KEY = "" # public Turnstile sitekey
+MAX_AMOUNT_YUAN = 1000 # per-donation cap, expressed in MAJOR units of the chosen currency
+                       # (USD -> 1000 dollars, JPY -> 1000 yen). The name is kept for
+                       # backwards compatibility; it is not CNY-specific.
+MAX_UPLOAD_BYTES = 2097152 # image upload size limit (2MB)
+R2_FONT_KEY = "fonts/NotoSansSC-Regular.otf" # R2 key of the font used to render OG images
+# For non-Chinese deployments switch to a Latin font (much smaller, ~300KB):
 # R2_FONT_KEY = "fonts/NotoSans-Regular.ttf"
-# 字体名默认从 R2_FONT_KEY 推导（NotoSans-Regular.ttf → NotoSans），一般不用填；
-# 只有 key 与字体内部名对不上时才需要显式指定：
+# The font family name is derived from R2_FONT_KEY automatically
+# (NotoSans-Regular.ttf -> NotoSans), so you normally don't need OG_FONT_NAME.
+# Set it explicitly only when the R2 key doesn't match the font's internal name:
 # OG_FONT_NAME = "NotoSans"
-SITE_URL = "" # 站点域名（不带结尾斜杠），如 https://fanwaner.example.com，用于 OG 分享图链接
+SITE_URL = "" # site origin without a trailing slash, e.g. https://fanwaner.example.com, used for OG share image URLs
 
-# ---- i18n（新增）----
-DEFAULT_LOCALE = "en"      # 默认界面语言：en / zh。面向海外用户保持 en
-DEFAULT_CURRENCY = "USD"   # 新饭碗儿的默认币种（用户仍可自选）
-NTFY_API = "https://ntfy.sh" # ntfy 自建服务地址，用官方就留默认
+# ---- i18n ----
+DEFAULT_LOCALE = "en"      # default UI language: en / zh. Keep "en" for overseas audiences.
+DEFAULT_CURRENCY = "USD"   # default currency for new bowls (owners can still change it)
+NTFY_API = "https://ntfy.sh" # ntfy server base URL; leave as-is to use the public service
 
-# ---- 投喂是否免放行（新增）----
-# "true" （默认）：投喂直接上墙、立刻计账并公开显示，碗主人事后仍可「拒了」（金额自动扣回）
-# "false"        ：回到「先 pending，碗主人放行后才显示」的审核流
+# ---- Donation auto-approval ----
+# "true"  (default): donations go live immediately, are counted and shown in public right away.
+#                    The bowl owner can still reject them afterwards (amount is deducted again).
+# "false"           : legacy moderation flow — donation stays "pending" until the owner approves it.
 AUTO_APPROVE_DONATIONS = "true"
